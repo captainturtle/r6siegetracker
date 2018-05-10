@@ -24,8 +24,8 @@ class R6Tracker():
         self.db = sqlite3.connect('rainbow.db')
         self.cursor = self.db.cursor()
         self.cursor.execute('CREATE TABLE IF NOT EXISTS players(id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR(100), userid VARCHAR(1000) UNIQUE);')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS dailystats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, log_date DATE, ranked_kill INTEGER, ranked_death INTEGER, ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, CONSTRAINT unqentry UNIQUE(userid, log_date));')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS pingstats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, log_datetime DATETIME, ranked_kill INTEGER, ranked_death INTEGER, ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER);')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS dailystats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, log_date DATE, ranked_kill INTEGER, ranked_death INTEGER, ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, bullet_hit INTEGER, bullet_fired INTEGER, CONSTRAINT unqentry UNIQUE(userid, log_date));')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS pingstats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, log_datetime DATETIME, ranked_kill INTEGER, ranked_death INTEGER, ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, bullet_hit INTEGER, bullet_fired INTEGER);')
         self.db.commit()
         self.db.close()
         pass
@@ -210,8 +210,77 @@ class R6Tracker():
                 for record in records:
                     print('{:10} {:10} {:10.4f} {:10.4f} {:10} {:10.4f} {:10.4f}'.format(*record))
             else:
-                print('Not enough data to print daily stats')
+                print('Not enough data to print cumulative stats')
         
+
+    '''
+    Print daily report for a user
+    '''
+    def print_daily_report(self, name, game_type='Ranked'):
+        print('Daily Report for {} ({})'.format(name, game_type))
+        u, players = self.get_players([name])
+        table = []
+        player = players[0]
+        # First get the last available two days
+        sqcmd = 'SELECT log_date, {gt}_kill, {gt}_death, {gt}_won, {gt}_lost, bullet_hit, bullet_fired FROM dailystats WHERE userid = {pid} ORDER BY id ASC LIMIT 2;'.format(gt=game_type, pid=player[0])
+        self.cursor.execute(sqcmd)
+        dstats = self.cursor.fetchall()
+        if len(dstats) == 1:
+            print('Not enough data for daily report!')
+            return
+        d0 = dstats[0] # Yesterday
+        d1 = dstats[1] # Today
+        yesterday = dstats[0]['log_date'] + ' 08:00:00.000000'
+        today = dstats[1]['log_date'] + ' 08:00:00.000000'
+        sqcmd = 'SELECT log_datetime, {gt}_kill, {gt}_death, {gt}_won, {gt}_lost, bullet_hit, bullet_fired, id FROM pingstats WHERE userid = {pid} AND (log_datetime BETWEEN "{yesterday}" AND "{today}" ) ORDER BY id ASC;'.format(gt=game_type, pid=player[0], yesterday=yesterday, today=today)
+        self.cursor.execute(sqcmd)
+        pstats = self.cursor.fetchall()
+        # First row
+        # Order : Date or Record, # of Games, K, D, K/D, 
+        #         Roll K, Roll D, Roll K/D, WON, LOST, W/L, 
+        #         ROLL WON, ROLL LOST, ROLL W/L,
+        #         BH, BF, Acc, 
+        #         RollBH, RollBF, RollAcc
+        d = d0
+        table.append([
+            d['log_date'], str(d[3]+d[4]), '', '', '', str(d[1]), str(d[2]), 
+            '{:.4f}'.format(d[1]/d[2]), '', '', '', str(d[3]), str(d[4]), 
+            '{:.4f}'.format(d[3]/d[4]),
+            '', '', '',
+            str(d[5]), str(d[6]), '{:6.3%}'.format(d[5]/d[6])
+            ])
+        for i, p in enumerate(pstats):
+            if p[3] + p[4] <= d[3] + d[4]:
+                continue
+            table.append([
+                str(i+1), str(p[3]+p[4]-d[3]-d[4]),
+                str(p[1]-d[1]), str(p[2]-d[2]),
+                '{:.4f}'.format((p[1]-d[1])/(p[2]-d[2])),
+                str(p[1]), str(p[2]), '{:.4f}'.format(p[1]/p[2]),
+                str(p[3]-d[3]), str(p[4]-d[4]), '{:.4f}'.format((p[3]-d[3])/max((p[4]-d[4]),1)),
+                str(p[3]), str(p[4]), '{:.4f}'.format(p[3]/p[4]),
+                str(p[5]-d[5]), str(p[6]-d[6]), '{:6.3%}'.format((p[5]-d[5])/(p[6]-d[6])),
+                str(p[5]), str(p[6]), '{:6.3%}'.format(p[5]/p[6])
+                ])
+            d = p
+        d = d1
+        daydiff = [pstats[-1][i]-pstats[0][i] for i in range(1,7)]
+        table.append([
+            d['log_date'], str(d[3]+d[4]) + ' (+' + str(daydiff[2]+daydiff[3]) + ')',
+            str(daydiff[0]), str(daydiff[1]), '{:.4f}'.format(daydiff[0]/max(daydiff[1],1)),
+            str(d[1]), str(d[2]), '{:.4f}'.format(d[1]/d[2]), 
+            str(daydiff[2]), str(daydiff[3]), '{:.4f}'.format(daydiff[2]/max(daydiff[3],1)), 
+            str(d[3]), str(d[4]), '{:.4f}'.format(d[3]/d[4]),
+            str(daydiff[4]), str(daydiff[5]), '{:6.3%}'.format(daydiff[4]/max(daydiff[5],1)),
+            str(d[5]), str(d[6]), '{:6.3%}'.format(d[5]/d[6])
+            ])
+        strmask = '{:>10} {:>9}' + ' {:>7}'*18
+        print(strmask.format('Record', '# Games', 'K', 'D', 'K/D', 'Roll-K',
+                             'Roll-D', 'Roll-KD', 'W', 'L', 'W/L', 'Roll-W',
+                             'Roll-L', 'Roll-WL', 'Hit', 'Fired', 'Acc',
+                             'R-Hit', 'R-Fired', 'R-Acc'))
+        for t in table:
+            print(strmask.format(*t))
 
     '''
     Prints all table contents to console
@@ -258,13 +327,14 @@ class R6Tracker():
 if __name__ == '__main__':
     # Init
     r = R6Tracker()
+    r.print_daily_report(name='TurtleBud.ZB')
     # Print functions
-    r.quick_peek()
-    r.print_player_stats(name='TurtleBud.ZB', logtype='daily')
-    r.print_player_stats(name='TurtleBud.ZB', logtype='cumulative')
-    r.print_player_stats(name='TurtleBud.ZB', logtype='checkpoint')
-    r.export_to_csv()
+    #r.quick_peek()
+    #r.print_player_stats(name='TurtleBud.ZB', logtype='daily')
+    #r.print_player_stats(name='TurtleBud.ZB', logtype='cumulative')
+    #r.print_player_stats(name='TurtleBud.ZB', logtype='checkpoint')
+    #r.export_to_csv()
     # Tracking functions
     # r.log_instant()
     # r.log_daily()
-    r.print_all_db()
+    #r.print_all_db()

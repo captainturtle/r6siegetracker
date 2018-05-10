@@ -12,6 +12,16 @@ class UbiConnection:
     '''
     
     def __init__(self):
+
+        if not os.path.exists('login.txt'):
+            raise Exception('You need to have login.txt in the directory!')
+        else:
+            logintext = open('login.txt', 'r') 
+            secrets = logintext.readline()
+            secrets = secrets.split(' ')
+            self.SECRET_USERNAME = secrets[0]
+            self.SECRET_PASSWORD = secrets[1]
+            logintext.close()
         self.session = {}
         # Session information
         if os.path.exists('info.txt'):
@@ -32,7 +42,7 @@ class UbiConnection:
             'Ubi-LocaleCode': 'en-US',
             'Accept-Language': 'en-US,en;q=0.9'
         }
-        r = requests.post(LOGIN_URL, headers=HEADERS, auth=HTTPBasicAuth(SECRET_USERNAME, SECRET_PASSWORD))
+        r = requests.post(LOGIN_URL, headers=HEADERS, auth=HTTPBasicAuth(self.SECRET_USERNAME, self.SECRET_PASSWORD))
         if r.status_code == 200:
             self.session = json.loads(r.text)
             f = open('info.txt', 'w')
