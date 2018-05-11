@@ -23,12 +23,27 @@ class R6Tracker():
     def install(self):
         self.db = sqlite3.connect('rainbow.db')
         self.cursor = self.db.cursor()
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS players(id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR(100), userid VARCHAR(1000) UNIQUE);')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS dailystats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, log_date DATE, ranked_kill INTEGER, ranked_death INTEGER, ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, bullet_hit INTEGER, bullet_fired INTEGER, CONSTRAINT unqentry UNIQUE(userid, log_date));')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS pingstats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, log_datetime DATETIME, ranked_kill INTEGER, ranked_death INTEGER, ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, bullet_hit INTEGER, bullet_fired INTEGER);')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS 
+                               players(id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR(100), 
+                                       userid VARCHAR(1000) UNIQUE);
+                            ''')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS 
+                               dailystats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, 
+                                          log_date DATE, ranked_kill INTEGER, ranked_death INTEGER, 
+                                          ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, 
+                                          casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, 
+                                          bullet_hit INTEGER, bullet_fired INTEGER, 
+                                          CONSTRAINT unqentry UNIQUE(userid, log_date));
+                            ''')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS 
+                               pingstats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, 
+                                         log_datetime DATETIME, ranked_kill INTEGER, ranked_death INTEGER, 
+                                         ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, 
+                                         casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, 
+                                         bullet_hit INTEGER, bullet_fired INTEGER);
+                            ''')
         self.db.commit()
         self.db.close()
-        pass
 
     '''
     Adds a new player to the database
@@ -259,7 +274,7 @@ class R6Tracker():
                 str(p[1]), str(p[2]), '{:.4f}'.format(p[1]/p[2]),
                 str(p[3]-d[3]), str(p[4]-d[4]), '{:.4f}'.format((p[3]-d[3])/max((p[4]-d[4]),1)),
                 str(p[3]), str(p[4]), '{:.4f}'.format(p[3]/p[4]),
-                str(p[5]-d[5]), str(p[6]-d[6]), '{:6.3%}'.format((p[5]-d[5])/(p[6]-d[6])),
+                str(p[5]-d[5]), str(p[6]-d[6]), '{:6.3%}'.format((p[5]-d[5])/max((p[6]-d[6]),1)),
                 str(p[5]), str(p[6]), '{:6.3%}'.format(p[5]/p[6])
                 ])
             d = p
@@ -301,12 +316,12 @@ class R6Tracker():
         print('CSV data:')
         sqcmd = '''SELECT log_date as dt, 'daily' as type, name, ranked_won, ranked_lost,
                           ranked_kill, ranked_death, casual_won, casual_lost,
-                          casual_kill, casual_death FROM players, dailystats 
+                          casual_kill, casual_death, bullet_hit, bullet_fired FROM players, dailystats 
                    WHERE dailystats.userid = players.id
                    UNION
                    SELECT log_datetime as dt, 'cp' as type, name, ranked_won, ranked_lost,
                           ranked_kill, ranked_death, casual_won, casual_lost,
-                          casual_kill, casual_death FROM players, pingstats 
+                          casual_kill, casual_death, bullet_hit, bullet_fired FROM players, pingstats 
                    WHERE pingstats.userid = players.id
                    ORDER BY type DESC, dt, name;'''
         self.cursor.execute(sqcmd)
