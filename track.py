@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from connect import UbiConnection
-from constants import STAT_LIST
+from constants import STAT_LIST, PROGRESS_LIST, RANKS, REGIONS
 import datetime
 
 class R6Tracker():
@@ -9,299 +9,286 @@ class R6Tracker():
     '''
     R6Tracker objects is used to record stats into local database
     '''
-    def __init__(self):
+    def __init__(self, ubiconnect):
         # Database information
         if not os.path.isfile('rainbow.db'):
             self.install()
-        self.db = sqlite3.connect('rainbow.db')
+        self.db = sqlite3.connect('rainbow.db', check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.cursor = self.db.cursor()
+        self.u = ubiconnect
+        print('Initialized the tracker.')
 
     '''
     Creates database files for the first use
     '''
     def install(self):
-        self.db = sqlite3.connect('rainbow.db')
+        self.db = sqlite3.connect('rainbow.db', check_same_thread=False)
         self.cursor = self.db.cursor()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS 
-                               players(id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR(100), 
-                                       userid VARCHAR(1000) UNIQUE);
+                               players(id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                       name VARCHAR(100), 
+                                       uplay_id VARCHAR(1000) UNIQUE,
+                                       region VARCHAR(10));
                             ''')
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS 
-                               dailystats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, 
-                                          log_date DATE, ranked_kill INTEGER, ranked_death INTEGER, 
-                                          ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, 
-                                          casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, 
-                                          bullet_hit INTEGER, bullet_fired INTEGER, 
-                                          CONSTRAINT unqentry UNIQUE(userid, log_date));
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS
+                               records(id INTEGER PRIMARY KEY AUTOINCREMENT, dt DATETIME);
                             ''')
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS 
-                               pingstats(id INTEGER PRIMARY KEY AUTOINCREMENT, userid INTEGER, 
-                                         log_datetime DATETIME, ranked_kill INTEGER, ranked_death INTEGER, 
-                                         ranked_won INTEGER, ranked_lost INTEGER, casual_kill INTEGER, 
-                                         casual_death INTEGER, casual_won INTEGER, casual_lost INTEGER, 
-                                         bullet_hit INTEGER, bullet_fired INTEGER);
-                            ''')
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS
+                               stats(id INTEGER PRIMARY KEY AUTOINCREMENT, player_id INTEGER, record_id INTEGER,
+                                     {} FLOAT,
+                                     {} FLOAT,
+                                     CONSTRAINT uq UNIQUE(player_id, record_id));
+                            '''.format(' INTEGER, '.join(s[1] for s in STAT_LIST), ' FLOAT, '.join(p[1] for p in PROGRESS_LIST)))
         self.db.commit()
         self.db.close()
+        print('Installed database rainbow.db!')
 
     '''
     Adds a new player to the database
     '''
-    def add_player(self, name):
-        u = UbiConnection()
+    def add_player(self, name, region=None):
+        u = self.u
         id = u.get_player_by_name(name)
-        self.cursor.execute('INSERT OR IGNORE INTO players (name, userid) VALUES (?,?);',(name,id))
+        if id is None:
+            print('ERROR: Failed to add {}'.format(name))
+            return None
+        if region is None:
+            # Try all regions, choose the one with highest games
+            max_games = 0
+            region = 'ncsa'
+            for r in REGIONS:
+                r_dict = u.get_rank(id, r[1])
+                region_games = r_dict['wins'] + r_dict['losses']
+                if region_games > max_games:
+                    region = r[1]
+                    max_games = region_games
+        self.cursor.execute('INSERT OR IGNORE INTO players (name, uplay_id, region) VALUES (?,?,?);',(name,id, region))
+        self.db.commit()
+        if self.cursor.rowcount == 1:
+            print('Added player {} (ID={})'.format(name, id))
+        else:
+            print('WARNING: Could not add player {}, possible duplicate'.format(name))
+
+    '''
+    Removes a player from the database
+    '''
+    def remove_player(self, name):
+        u = self.u
+        id = u.get_player_by_name(name)
+        self.cursor.execute('DELETE FROM players WHERE uplay_id = "{}"'.format(id))
+        self.db.commit()
+        if self.cursor.rowcount == 1:
+            print('Removed player {} (ID={})'.format(name, id))
+        else:
+            print('WARNING: Could not remove player {}, does not exist!'.format(name))
+
+    '''
+    Creates an entry in records table immediately, it checks all players record only those who have played games since last record
+    '''
+    def save_state(self, verbose=False):
+        u = self.u
+        players = self.get_all_players()
+        new_save = self.is_save_required(players)
+        if not any(new_save):
+            print('No changes...')
+            return
+        dt = str(datetime.datetime.now())
+        # Create a new record point
+        sqcmd = 'INSERT INTO records(dt) VALUES("{}")'.format(dt)
+        self.cursor.execute(sqcmd)
+        record_id = self.cursor.lastrowid
+        for i, player in enumerate(players):
+            if not new_save[i]:
+                print('No changes for player {}'.format(player['name']))
+                continue
+            print('Getting current stats for {}'.format(player['name']))
+            # Get stats
+            stats = u.get_stats(player['uplay_id'])
+            rank = u.get_rank(player['uplay_id'], region=player['region'])
+            all_stats = []
+            for s in STAT_LIST:
+                all_stats.append(str(stats[s[0]]))
+                if verbose:
+                    print('{}: {}'.format(s[2], all_stats[-1]))
+            for p in PROGRESS_LIST:
+                all_stats.append(str(rank[p[0]]))
+                if verbose:
+                    print('{}: {}'.format(p[2], all_stats[-1]))
+            merged_stats = ','.join(all_stats)
+            # Insert to DB
+            sqcmd = 'INSERT INTO stats VALUES(NULL,{},{},{});'.format(player['id'], record_id, merged_stats)
+            self.cursor.execute(sqcmd)
         self.db.commit()
 
     '''
-    Creates an entry in dailystats table, it is aimed to be used with a scheduler
+    Returns a list of booleans for players whose stats should be updated
     '''
-    def log_daily(self):
-        u, players = self.get_all_players()
-        for player in players:
-            print('Getting daily stats for {}'.format(player[1]))
-            stats = u.get_stats(player[2])
-            ordered_stats = []
-            for s in STAT_LIST:
-                ordered_stats.append(str(stats[s[0]]))
-            dt = str(datetime.datetime.now().date())
-            sqcmd = 'INSERT OR IGNORE INTO dailystats(userid, log_date, {}) VALUES({}, "{}", {});'.format(','.join([s[1] for s in STAT_LIST]), player[0], dt, ','.join(ordered_stats))
+    def is_save_required(self, player_list):
+        lastgames = [0]*len(player_list)
+        new_save = [False]*len(player_list)
+        # Either has no records
+        for i, player in enumerate(player_list):
+            sqcmd = 'SELECT * FROM stats WHERE player_id = {} ORDER BY id DESC LIMIT 1;'.format(player[0])
             self.cursor.execute(sqcmd)
-            self.db.commit()
+            lastgame = self.cursor.fetchall()
+            if len(lastgame) == 0:
+                print('No previous game record exists in DB for {}'.format(player['name']))
+                new_save[i] = True
+                lastgames[i] = 0
+            else:
+                lastgames[i] = lastgame[0]['match_played']
+        # Or the total games played is greater than previous record
+        u = self.u
+        games = u.get_total_games([player['uplay_id'] for player in player_list])
+        for i in range(len(games)):
+            if games[i] - lastgames[i] > 0.5:
+                print('{} new game(s) have found for {}'.format(games[i]-lastgames[i], player_list[i]['name']))
+                new_save[i] = True
+        # If all fails, it means there is no new update
+        return new_save
 
     '''
-    Creates an entry in pingstats table immediately, it is aimed to be used after every game
+    Returns the progress info for user
     '''
-    def log_instant(self):
-        u, players = self.get_all_players()
-        for player in players:
-            print('Getting current stats for {}'.format(player[1]))
-            stats = u.get_stats(player[2])
-            ordered_stats = []
-            for s in STAT_LIST:
-                ordered_stats.append(str(stats[s[0]]))
-            dt = str(datetime.datetime.now())
-            sqcmd = 'INSERT INTO pingstats(userid, log_datetime, {}) VALUES({}, "{}", {});'.format(','.join([s[1] for s in STAT_LIST]), player[0], dt, ','.join(ordered_stats))
+    def get_player_progress(self, name, start_dt, end_dt, ranked=True, casual=False, gun=False):
+        if ranked:
+            ranked_stats = [2,3,4,5,10,11]
+
+            # Get all stats first
+            sqcmd = 'SELECT dt, {}, {} FROM players, records, stats WHERE players.name="{}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt BETWEEN "{}" AND "{}";'.format(
+                ', '.join([STAT_LIST[i][1] for i in ranked_stats]), 
+                ', '.join([i[1] for i in PROGRESS_LIST]),
+                name,
+                start_dt,
+                end_dt
+                )
             self.cursor.execute(sqcmd)
-            self.db.commit()
+            allrecords = self.cursor.fetchall()
+            
+            if allrecords is None or len(allrecords) == 0:
+                print('WARNING: No records between requested date-times.')
+            #elif len(allrecords) == 1:
+            #    print('WARNING: Only 1 record has been found between date-times.')
+            else: 
+                
+                # Ranked Progress: Ranked in-between stats
+                
+                # The structure:
+                prog_table = [['Record', '# Games', 'K', 'D', 'K/D', 'W', 'L', 'W/L', 'MMR', 'Skill', 'Lower CI']]
+                r0 = allrecords[0]
+                for r1 in allrecords:
+                    if r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] < 0.5:
+                        # No ranked games between records
+                        continue
+                    prog_table.append([
+                        #r0['dt'].split('.')[0] + ' to ' + r1['dt'].split('.')[0],
+                        r0['dt'].split('.')[0],
+                        r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'],
+                        r1['ranked_kill'] - r0['ranked_kill'],
+                        r1['ranked_death'] - r0['ranked_death'],
+                        '{:.3f}'.format((r1['ranked_kill'] - r0['ranked_kill'])/max(1,r1['ranked_death'] - r0['ranked_death'])),
+                        r1['ranked_won'] - r0['ranked_won'],
+                        r1['ranked_lost'] - r0['ranked_lost'],
+                        '{:.3f}'.format((r1['ranked_won'] - r0['ranked_won'])/max(1,r1['ranked_lost'] - r0['ranked_lost'])),
+                        '{:.2f}'.format(r1['mmr'] - r0['mmr']),
+                        '{:.2f}'.format(r1['skill_mean'] - r0['skill_mean']),
+                        '{:.2f}'.format((r1['skill_mean'] - 1.96*r1['skill_std'])-(r0['skill_mean'] - 1.96*r0['skill_std']))
+                        ])
+                    r0 = r1
+                prog_table.append([allrecords[-1]['dt'].split('.')[0]] + ['']*10)
+                print('\nRanked In-Between Progress:')
+                pretty_print(prog_table)
+
+
+                # Ranked Cumulative Progress:
+
+                # The structure:
+                prog_table = [['Record', '# Games', 'K', 'D', 'K/D', 'KPG', 'Assists', 'APG', 'Headshots', 'HPG', 'W', 'L', 'W/L', 'Season W', 'Season L', 'Season W/L', 'MMR', 'Rank', 'Skill', 'Skill SD']]
+                r0 = allrecords[0]
+                for r1 in allrecords:
+                    if r1 != r0  and (r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] < 0.5):
+                        # No ranked games between records
+                        continue
+                    prog_table.append([
+                        r1['dt'].split('.')[0],
+                        r1['ranked_won'] + r1['ranked_lost'],
+                        r1['ranked_kill'],
+                        r1['ranked_death'],
+                        '{:.4f}'.format((r1['ranked_kill'])/max(1,r1['ranked_death'])),
+                        '{:.4f}'.format((r1['ranked_kill'])/max(1,r1['ranked_won'] + r1['ranked_lost'])),
+                        r1['assists'],
+                        '{:.4f}'.format(r1['assists']/max(1,r1['ranked_won'] + r1['ranked_lost'])),
+                        r1['headshots'],
+                        '{:.4f}'.format(r1['headshots']/max(1,r1['ranked_won'] + r1['ranked_lost'])),
+                        r1['ranked_won'],
+                        r1['ranked_lost'],
+                        '{:.4f}'.format((r1['ranked_won'])/max(1,r1['ranked_lost'])),
+                        '{:.0f}'.format(r1['season_wins']),
+                        '{:.0f}'.format(r1['season_losses']),
+                        '{:.4f}'.format((r1['season_wins'])/max(1,r1['season_losses'])),
+                        '{:.2f}'.format(r1['mmr']),
+                        RANKS[int(r1['rank'])],
+                        '{:.2f}'.format(r1['skill_mean']),
+                        '{:.2f}'.format(r1['skill_std'])
+                        ])
+                    r0 = r1
+                p0 = prog_table[1]
+                p1 = prog_table[-1]
+                
+                diff = [
+                    '(Diff)',
+                    p1[1] - p0[1], # Games
+                    p1[2] - p0[2], # K
+                    p1[3] - p0[3], # D
+                    '{:.4f}'.format(float(p1[4]) - float(p0[4])), # K/D
+                    '{:.4f}'.format(float(p1[5]) - float(p0[5])), # KPG
+                    p1[6] - p0[6], # A
+                    '{:.4f}'.format(float(p1[7]) - float(p0[7])), # APG
+                    p1[8] - p0[8], # HS
+                    '{:.4f}'.format(float(p1[9]) - float(p0[9])), # HPG
+                    p1[10] - p0[10], # W
+                    p1[11] - p0[11], # L
+                    '{:.4f}'.format(float(p1[12]) - float(p0[12])), # W/L
+                    '{:.0f}'.format(float(p1[13]) - float(p0[13])), # SW
+                    '{:.0f}'.format(float(p1[14]) - float(p0[14])), # SL
+                    '{:.4f}'.format(float(p1[15]) - float(p0[15])), # SWL
+                    '{:.2f}'.format(float(p1[16]) - float(p0[16])), # MMR
+                    round(allrecords[-1]['rank'] - allrecords[0]['rank']), # Rank
+                    '{:.2f}'.format(float(p1[18]) - float(p0[18])), # Skill
+                    '{:.2f}'.format(float(p1[19]) - float(p0[19])) # Skill SD
+                    ]
+                prog_table.append(diff)
+                print('\nRanked Cumulative Progress:')
+                pretty_print(prog_table)
+
+        #if casual:
+            
+        #if gun:
+        
+        pass
 
     '''
     Returns a list of requested players, names should be a list
     '''
     def get_players(self, names):
-        u = UbiConnection()
+        u = self.u
         self.cursor.execute('SELECT * FROM players WHERE name IN ({});'.format(','.join(['"' + str(name) + '"' for name in names])))
-        return u, self.cursor.fetchall()
+        return self.cursor.fetchall()
 
     '''
     Returns a list of all players in the database
     '''
     def get_all_players(self):
-        u = UbiConnection()
+        u = self.u
         self.cursor.execute('SELECT * FROM players;')
-        return u, self.cursor.fetchall()
-
-    '''
-    Checks the performance since the last record without saving
-    '''
-    def quick_peek(self, names=None):
-        if names is None:
-            u, players = self.get_all_players()
-        else:
-            u, players = self.get_players(names)
-
-        requested_stats = [i[1] for i in STAT_LIST]
-        for player in players:
-            stats = u.get_stats(player[2])
-            print('Peeking stats for {}:'.format(player[1]))
-            print('-----\nSince yesterday: ')
-            sqcmd = 'SELECT * FROM dailystats WHERE userid = {} ORDER BY id DESC LIMIT 1;'.format(player[0])
-            self.cursor.execute(sqcmd)
-            dailystats = self.cursor.fetchone()
-            prevs = 0
-            for i, st in enumerate(STAT_LIST):
-                curs = stats[st[0]] - dailystats[st[1]]
-                if i % 2 == 0:
-                    ratio = ''
-                else:
-                    ratio = '[{}/{} = {:.2f}]'.format(prevs,curs,prevs/max([curs, 1]))
-                print('{}: {} {}'.format(st[2], curs, ratio))
-                prevs = curs
-            print('-----\nSince last record: ')
-            sqcmd = 'SELECT * FROM pingstats WHERE userid = {} ORDER BY id DESC LIMIT 1;'.format(player[0])
-            self.cursor.execute(sqcmd)
-            pingstats = self.cursor.fetchone()
-            for i, st in enumerate(STAT_LIST):
-                curs = stats[st[0]] - pingstats[st[1]]
-                if i % 2 == 0:
-                    ratio = ''
-                else:
-                    ratio = '[{}/{} = {:.2f}]'.format(prevs,curs,prevs/max([curs, 1]))
-                print('{}: {} {}'.format(st[2], curs, ratio))
-                prevs = curs
-
-    '''
-    Prints stats of an individual player
-    '''
-    def print_player_stats(self, logtype='daily', limit=10, name=None, stat=None, today=False):
-        u, players = self.get_players([name])
-        player = players[0]
-        print('Stats for {}\n-----'.format(player[1]))
-        if logtype == 'daily':
-            # Daily stats
-            sqcmd = 'SELECT * FROM dailystats WHERE userid = {} ORDER BY id DESC LIMIT {};'.format(player[0], limit+1)
-            self.cursor.execute(sqcmd)
-            pstats = self.cursor.fetchall()
-            
-            if len(pstats) > 1:
-                print('Daily stats:')
-                last_row = []
-                records = []
-                for i, row in enumerate(pstats):
-                    current_row = row
-                    if last_row:
-                        date = current_row['log_date'] + ' to ' + last_row['log_date']
-                        rmp = last_row['ranked_won'] + last_row['ranked_lost'] - current_row['ranked_won'] - current_row['ranked_lost']
-                        rwl = (last_row['ranked_won'] - current_row['ranked_won'])/max(last_row['ranked_lost'] - current_row['ranked_lost'],1)
-                        rkd = (last_row['ranked_kill'] - current_row['ranked_kill'])/max(last_row['ranked_death'] - current_row['ranked_death'],1)
-                        cmp = last_row['casual_won'] + last_row['casual_lost'] - current_row['casual_won'] - current_row['casual_lost']
-                        cwl = (last_row['casual_won'] - current_row['casual_won'])/max(last_row['casual_lost'] - current_row['casual_lost'],1)
-                        ckd = (last_row['casual_kill'] - current_row['casual_kill'])/max(last_row['casual_death'] - current_row['casual_death'],1)
-                        records.append([date, rmp, rwl, rkd, cmp, cwl, ckd])
-                    last_row = current_row
-                # Print
-                print('{:<24} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}'.format('Date', 'Ranked MP', 'Ranked W/L', 'Ranked K/D', 'Casual MP', 'Casual W/L', 'Casual K/D'))
-                for record in records:
-                    print('{:24} {:10} {:10.2f} {:10.2f} {:10} {:10.2f} {:10.2f}'.format(*record))
-            else:
-                print('Not enough data to print daily stats')
-
-        elif logtype == 'checkpoint':
-            # Ping stats
-            sqcmd = 'SELECT * FROM pingstats WHERE userid = {} ORDER BY id DESC LIMIT {};'.format(player[0], limit+1)
-            self.cursor.execute(sqcmd)
-            pstats = self.cursor.fetchall()
-            if len(pstats) > 1:
-                print('Checkpoint stats:')
-                last_row = []
-                records = []
-                for i, row in enumerate(pstats):
-                    current_row = row
-                    if last_row:
-                        rmp = last_row['ranked_won'] + last_row['ranked_lost'] - current_row['ranked_won'] - current_row['ranked_lost']
-                        rwl = (last_row['ranked_won'] - current_row['ranked_won'])/max(last_row['ranked_lost'] - current_row['ranked_lost'],1)
-                        rkd = (last_row['ranked_kill'] - current_row['ranked_kill'])/max(last_row['ranked_death'] - current_row['ranked_death'],1)
-                        cmp = last_row['casual_won'] + last_row['casual_lost'] - current_row['casual_won'] - current_row['casual_lost']
-                        cwl = (last_row['casual_won'] - current_row['casual_won'])/max(last_row['casual_lost'] - current_row['casual_lost'],1)
-                        ckd = (last_row['casual_kill'] - current_row['casual_kill'])/max(last_row['casual_death'] - current_row['casual_death'],1)
-                        records.append([rmp, rwl, rkd, cmp, cwl, ckd])
-                    last_row = current_row
-                # Print
-                print('{:>10} {:>10} {:>10} {:>10} {:>10} {:>10}'.format('Ranked MP', 'Ranked W/L', 'Ranked K/D', 'Casual MP', 'Casual W/L', 'Casual K/D'))
-                for record in records:
-                    print('{:10} {:10.2f} {:10.2f} {:10} {:10.2f} {:10.2f}'.format(*record))
-            else:
-                print('Not enough data to print ping stats')
-        elif logtype == 'cumulative':
-            sqcmd = 'SELECT * FROM dailystats WHERE userid = {} ORDER BY id DESC LIMIT {};'.format(player[0], limit+1)
-            self.cursor.execute(sqcmd)
-            pstats = self.cursor.fetchall()
-            
-            if len(pstats) > 1:
-                print('Cumulative stats:')
-                records = []
-                for i, row in enumerate(pstats):
-                    date = row['log_date']
-                    rmp = row['ranked_won'] + row['ranked_lost']
-                    rwl = row['ranked_won'] / max(row['ranked_lost'], 1)
-                    rkd = row['ranked_kill'] / max(row['ranked_death'], 1)
-                    cmp = row['casual_won'] + row['casual_lost']
-                    cwl = row['casual_won'] / max(row['casual_lost'], 1)
-                    ckd = row['casual_kill'] / max(row['casual_death'], 1)
-                    records.append([date, rmp, rwl, rkd, cmp, cwl, ckd])
-                # Print
-                print('{:<10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}'.format('Date', 'Ranked MP', 'Ranked W/L', 'Ranked K/D', 'Casual MP', 'Casual W/L', 'Casual K/D'))
-                for record in records:
-                    print('{:10} {:10} {:10.4f} {:10.4f} {:10} {:10.4f} {:10.4f}'.format(*record))
-            else:
-                print('Not enough data to print cumulative stats')
-        
-
-    '''
-    Print daily report for a user
-    '''
-    def print_daily_report(self, name, game_type='Ranked'):
-        print('Daily Report for {} ({})'.format(name, game_type))
-        u, players = self.get_players([name])
-        table = []
-        player = players[0]
-        # First get the last available two days
-        sqcmd = 'SELECT log_date, {gt}_kill, {gt}_death, {gt}_won, {gt}_lost, bullet_hit, bullet_fired FROM dailystats WHERE userid = {pid} ORDER BY id ASC LIMIT 2;'.format(gt=game_type, pid=player[0])
-        self.cursor.execute(sqcmd)
-        dstats = self.cursor.fetchall()
-        if len(dstats) == 1:
-            print('Not enough data for daily report!')
-            return
-        d0 = dstats[0] # Yesterday
-        d1 = dstats[1] # Today
-        yesterday = dstats[0]['log_date'] + ' 08:00:00.000000'
-        today = dstats[1]['log_date'] + ' 08:00:00.000000'
-        sqcmd = 'SELECT log_datetime, {gt}_kill, {gt}_death, {gt}_won, {gt}_lost, bullet_hit, bullet_fired, id FROM pingstats WHERE userid = {pid} AND (log_datetime BETWEEN "{yesterday}" AND "{today}" ) ORDER BY id ASC;'.format(gt=game_type, pid=player[0], yesterday=yesterday, today=today)
-        self.cursor.execute(sqcmd)
-        pstats = self.cursor.fetchall()
-        # First row
-        # Order : Date or Record, # of Games, K, D, K/D, 
-        #         Roll K, Roll D, Roll K/D, WON, LOST, W/L, 
-        #         ROLL WON, ROLL LOST, ROLL W/L,
-        #         BH, BF, Acc, 
-        #         RollBH, RollBF, RollAcc
-        d = d0
-        table.append([
-            d['log_date'], str(d[3]+d[4]), '', '', '', str(d[1]), str(d[2]), 
-            '{:.4f}'.format(d[1]/d[2]), '', '', '', str(d[3]), str(d[4]), 
-            '{:.4f}'.format(d[3]/d[4]),
-            '', '', '',
-            str(d[5]), str(d[6]), '{:6.3%}'.format(d[5]/d[6])
-            ])
-        for i, p in enumerate(pstats):
-            if p[3] + p[4] <= d[3] + d[4]:
-                continue
-            table.append([
-                str(i+1), str(p[3]+p[4]-d[3]-d[4]),
-                str(p[1]-d[1]), str(p[2]-d[2]),
-                '{:.4f}'.format((p[1]-d[1])/(p[2]-d[2])),
-                str(p[1]), str(p[2]), '{:.4f}'.format(p[1]/p[2]),
-                str(p[3]-d[3]), str(p[4]-d[4]), '{:.4f}'.format((p[3]-d[3])/max((p[4]-d[4]),1)),
-                str(p[3]), str(p[4]), '{:.4f}'.format(p[3]/p[4]),
-                str(p[5]-d[5]), str(p[6]-d[6]), '{:6.3%}'.format((p[5]-d[5])/max((p[6]-d[6]),1)),
-                str(p[5]), str(p[6]), '{:6.3%}'.format(p[5]/p[6])
-                ])
-            d = p
-        d = d1
-        daydiff = [pstats[-1][i]-pstats[0][i] for i in range(1,7)]
-        table.append([
-            d['log_date'], str(d[3]+d[4]) + ' (+' + str(daydiff[2]+daydiff[3]) + ')',
-            str(daydiff[0]), str(daydiff[1]), '{:.4f}'.format(daydiff[0]/max(daydiff[1],1)),
-            str(d[1]), str(d[2]), '{:.4f}'.format(d[1]/d[2]), 
-            str(daydiff[2]), str(daydiff[3]), '{:.4f}'.format(daydiff[2]/max(daydiff[3],1)), 
-            str(d[3]), str(d[4]), '{:.4f}'.format(d[3]/d[4]),
-            str(daydiff[4]), str(daydiff[5]), '{:6.3%}'.format(daydiff[4]/max(daydiff[5],1)),
-            str(d[5]), str(d[6]), '{:6.3%}'.format(d[5]/d[6])
-            ])
-        strmask = '{:>10} {:>9}' + ' {:>7}'*18
-        print(strmask.format('Record', '# Games', 'K', 'D', 'K/D', 'Roll-K',
-                             'Roll-D', 'Roll-KD', 'W', 'L', 'W/L', 'Roll-W',
-                             'Roll-L', 'Roll-WL', 'Hit', 'Fired', 'Acc',
-                             'R-Hit', 'R-Fired', 'R-Acc'))
-        for t in table:
-            print(strmask.format(*t))
+        return self.cursor.fetchall()
 
     '''
     Prints all table contents to console
     '''
     def print_all_db(self):
-        tables = ['players', 'dailystats', 'pingstats']
+        tables = ['players', 'records', 'stats']
         for t in tables:
             print(t)
             self.cursor.execute('SELECT * FROM {};'.format(t))
@@ -314,42 +301,64 @@ class R6Tracker():
     '''
     def export_to_csv(self):
         print('CSV data:')
-        sqcmd = '''SELECT log_date as dt, 'daily' as type, name, ranked_won, ranked_lost,
-                          ranked_kill, ranked_death, casual_won, casual_lost,
-                          casual_kill, casual_death, bullet_hit, bullet_fired FROM players, dailystats 
-                   WHERE dailystats.userid = players.id
-                   UNION
-                   SELECT log_datetime as dt, 'cp' as type, name, ranked_won, ranked_lost,
-                          ranked_kill, ranked_death, casual_won, casual_lost,
-                          casual_kill, casual_death, bullet_hit, bullet_fired FROM players, pingstats 
-                   WHERE pingstats.userid = players.id
-                   ORDER BY type DESC, dt, name;'''
+        sqcmd = 'SELECT players.name, records.dt, stats.* FROM players, records, stats WHERE players.id = stats.player_id AND records.id = stats.record_id;'
         self.cursor.execute(sqcmd)
         rows = self.cursor.fetchall()
+        csvdata = [','.join(d[0] for d in self.cursor.description)]
         for row in rows:
-            print(','.join([str(i) for i in list(row)]))
-        pass
+            csvdata.append(','.join([str(i) for i in list(row)]))
+        csvfile = open('export.csv', 'w')
+        for r in csvdata:
+            csvfile.write(r + '\n')
+            print(r)
+        csvfile.close()
 
     '''
-    Deletes rainbow.db file
+    Resets rainbow.db file
     '''
-    def _delete(self):
+    def _reset(self):
+        print('Resetting the database...')
         if self.db:
             self.db.close()
         if os.path.isfile('rainbow.db'):
             os.remove('rainbow.db')
+        self.install()
+        self.db = sqlite3.connect('rainbow.db', check_same_thread=False)
+        self.db.row_factory = sqlite3.Row
+        self.cursor = self.db.cursor()
+
+    '''
+    Returns the requested info of a user
+    '''
+    def get_user_info(self, name, info):
+        sqcmd = 'SELECT {} FROM stats, players WHERE stats.player_id = players.id AND players.name = "{}" ORDER BY stats.id DESC LIMIT 1;'.format(info, name)
+        self.cursor.execute(sqcmd)
+        rows = self.cursor.fetchall()
+        if len(rows) == 0:
+            return None
+        else:
+            return rows[0][info]
+
+    def time_diff(self, start, end):
+        mask = '%Y-%m-%d %H:%M:%S.%f'
+        st = datetime.datetime.strptime(start, mask)
+        en = datetime.datetime.strptime(end, mask)
+        return en-st
+
+def pretty_print(table):
+    c_sizes = [max(len(str(table[i][c])) for i in range(len(table)))  for c in range(len(table[0]))]
+    c_sizes = '}  {:>'.join(str(i) for i in c_sizes)
+    mask = '{:>' + c_sizes + '}'
+    for row in table:
+        str_row = [str(v) for v in row]
+        print(mask.format(*str_row))
 
 if __name__ == '__main__':
     # Init
-    r = R6Tracker()
-    r.print_daily_report(name='TurtleBud.ZB')
-    # Print functions
-    #r.quick_peek()
-    #r.print_player_stats(name='TurtleBud.ZB', logtype='daily')
-    #r.print_player_stats(name='TurtleBud.ZB', logtype='cumulative')
-    #r.print_player_stats(name='TurtleBud.ZB', logtype='checkpoint')
-    #r.export_to_csv()
-    # Tracking functions
-    # r.log_instant()
-    # r.log_daily()
+    r = R6Tracker(UbiConnection())
+    #r._reset()
+    #r.add_player('TurtleBud.ZB')
+    #r.save_state()
     #r.print_all_db()
+    #print(r.get_user_info('TurtleBud.ZB', 'mmr'))
+    #r.export_to_csv()
