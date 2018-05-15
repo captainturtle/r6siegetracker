@@ -1,17 +1,17 @@
 # Constant fields
 UBI_APP_ID = '39baebad-39e5-4552-8c25-2c9b919064e2'
-GUN_LIST = [(1, 'ar', 'Assault Rifle'),
-            (2, 'smg', 'Submachine Gun'),
-            (3, 'lmg', 'Light Machine Gun'),
-            (4, 'marksman', 'Marksman Rifle'),
-            (5, 'handgun', 'Handgun'),
-            (6, 'shotgun', 'Shotgun'),
-            (7, 'mp', 'Machine Pistol')]
+GUN_LIST = [(1, 'ar', 'Assault Rifle', 'AR'),
+            (2, 'smg', 'Submachine Gun', 'SMG'),
+            (3, 'lmg', 'Light Machine Gun', 'LMG'),
+            (4, 'marksman', 'Marksman Rifle', 'MR'),
+            (5, 'handgun', 'Handgun', 'HG'),
+            (6, 'shotgun', 'Shotgun', 'SH'),
+            (7, 'mp', 'Machine Pistol', 'MP')]
 GUN_STAT_LIST = [
+    ('weapontypepvp_bulletfired', '{} Fired', 'fired'),
+    ('weapontypepvp_bullethit', '{} Hit', 'hit'),
     ('weapontypepvp_kills', '{} Kills', 'kill'),
     ('weapontypepvp_headshot', '{} Headshots', 'headshot'),
-    ('weapontypepvp_bulletfired', '{} Bullets Fired', 'fired'),
-    ('weapontypepvp_bullethit', '{} Bullets Hit', 'hit')
     ]
 
 # DB fields: [0] JSON name, [1] DB column name, [2] User-friendly column name, [3] API request field name
@@ -28,7 +28,7 @@ STAT_LIST = [
     ('casualpvp_matchlost:infinite', 'casual_lost', 'Casual Lost', 'casualpvp_matchlost'),
     ('generalpvp_killassists:infinite', 'assists', 'Assists', 'generalpvp_killassists'),
     ('generalpvp_headshot:infinite', 'headshots', 'Headshots', 'generalpvp_headshot')
-    ] + [('{}:{}:infinite'.format(s[0], g[0]), '{}_{}'.format(s[2], g[1]), s[1].format(g[2]), s[0]) for g in GUN_LIST for s in GUN_STAT_LIST]
+    ] + [('{}:{}:infinite'.format(s[0], g[0]), '{}_{}'.format(s[2], g[1]), s[1].format(g[3]), s[0]) for g in GUN_LIST for s in GUN_STAT_LIST]
 PROGRESS_LIST = [
     ('mmr', 'mmr', 'MMR'),
     ('max_mmr', 'max_mmr', 'Max MMR'),

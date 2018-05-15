@@ -156,7 +156,7 @@ class R6Tracker():
             ranked_stats = [2,3,4,5,10,11]
 
             # Get all stats first
-            sqcmd = 'SELECT dt, {}, {} FROM players, records, stats WHERE players.name="{}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt BETWEEN "{}" AND "{}";'.format(
+            sqcmd = 'SELECT dt, casual_won, casual_lost, {}, {} FROM players, records, stats WHERE players.name="{}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt BETWEEN "{}" AND "{}";'.format(
                 ', '.join([STAT_LIST[i][1] for i in ranked_stats]), 
                 ', '.join([i[1] for i in PROGRESS_LIST]),
                 name,
@@ -167,7 +167,7 @@ class R6Tracker():
             allrecords = self.cursor.fetchall()
             
             if allrecords is None or len(allrecords) == 0:
-                print('WARNING: No records between requested date-times.')
+                print('WARNING: No ranked game records between requested date-times.')
             #elif len(allrecords) == 1:
             #    print('WARNING: Only 1 record has been found between date-times.')
             else: 
@@ -175,19 +175,25 @@ class R6Tracker():
                 # Ranked Progress: Ranked in-between stats
                 
                 # The structure:
-                prog_table = [['Record', '# Games', 'K', 'D', 'K/D', 'W', 'L', 'W/L', 'MMR', 'Skill', 'Lower CI']]
+                prog_table = [['Record', '# Games', 'K', 'A', 'D', 'K/D', 'HS', 'W', 'L', 'W/L', 'MMR', 'Skill', 'Lower CI']]
                 r0 = allrecords[0]
                 for r1 in allrecords:
                     if r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] < 0.5:
                         # No ranked games between records
+                        r0 = r1
                         continue
+                    inaccuracy = False
+                    if (r1['casual_won'] + r1['casual_lost'] - r0['casual_won'] - r0['casual_lost'] > 0.5):
+                        inaccuracy = True
                     prog_table.append([
                         #r0['dt'].split('.')[0] + ' to ' + r1['dt'].split('.')[0],
                         r0['dt'].split('.')[0],
                         r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'],
                         r1['ranked_kill'] - r0['ranked_kill'],
+                        '*' if inaccuracy else r1['assists'] - r0['assists'],
                         r1['ranked_death'] - r0['ranked_death'],
                         '{:.3f}'.format((r1['ranked_kill'] - r0['ranked_kill'])/max(1,r1['ranked_death'] - r0['ranked_death'])),
+                        '*' if inaccuracy else r1['headshots'] - r0['headshots'],
                         r1['ranked_won'] - r0['ranked_won'],
                         r1['ranked_lost'] - r0['ranked_lost'],
                         '{:.3f}'.format((r1['ranked_won'] - r0['ranked_won'])/max(1,r1['ranked_lost'] - r0['ranked_lost'])),
@@ -196,7 +202,7 @@ class R6Tracker():
                         '{:.2f}'.format((r1['skill_mean'] - 1.96*r1['skill_std'])-(r0['skill_mean'] - 1.96*r0['skill_std']))
                         ])
                     r0 = r1
-                prog_table.append([allrecords[-1]['dt'].split('.')[0]] + ['']*10)
+                prog_table.append([allrecords[-1]['dt'].split('.')[0]] + ['']*12)
                 print('\nRanked In-Between Progress:')
                 pretty_print(prog_table)
 
@@ -209,7 +215,11 @@ class R6Tracker():
                 for r1 in allrecords:
                     if r1 != r0  and (r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] < 0.5):
                         # No ranked games between records
+                        r0 = r1
                         continue
+                    inaccuracy = False
+                    if (r1['casual_won'] + r1['casual_lost'] - r0['casual_won'] - r0['casual_lost'] > 0.5):
+                        inaccuracy = True
                     prog_table.append([
                         r1['dt'].split('.')[0],
                         r1['ranked_won'] + r1['ranked_lost'],
@@ -217,10 +227,10 @@ class R6Tracker():
                         r1['ranked_death'],
                         '{:.4f}'.format((r1['ranked_kill'])/max(1,r1['ranked_death'])),
                         '{:.4f}'.format((r1['ranked_kill'])/max(1,r1['ranked_won'] + r1['ranked_lost'])),
-                        r1['assists'],
-                        '{:.4f}'.format(r1['assists']/max(1,r1['ranked_won'] + r1['ranked_lost'])),
-                        r1['headshots'],
-                        '{:.4f}'.format(r1['headshots']/max(1,r1['ranked_won'] + r1['ranked_lost'])),
+                        '*' if inaccuracy else r1['assists'],
+                        '*' if inaccuracy else '{:.4f}'.format(r1['assists']/max(1,r1['ranked_won'] + r1['ranked_lost'])),
+                        '*' if inaccuracy else r1['headshots'],
+                        '*' if inaccuracy else '{:.4f}'.format(r1['headshots']/max(1,r1['ranked_won'] + r1['ranked_lost'])),
                         r1['ranked_won'],
                         r1['ranked_lost'],
                         '{:.4f}'.format((r1['ranked_won'])/max(1,r1['ranked_lost'])),
@@ -243,10 +253,10 @@ class R6Tracker():
                     p1[3] - p0[3], # D
                     '{:.4f}'.format(float(p1[4]) - float(p0[4])), # K/D
                     '{:.4f}'.format(float(p1[5]) - float(p0[5])), # KPG
-                    p1[6] - p0[6], # A
-                    '{:.4f}'.format(float(p1[7]) - float(p0[7])), # APG
-                    p1[8] - p0[8], # HS
-                    '{:.4f}'.format(float(p1[9]) - float(p0[9])), # HPG
+                    '*' if isinstance(p1[6], str) or isinstance(p0[6], str) else p1[6] - p0[6], # A
+                    '*' if '*' in p1[7] else '{:.4f}'.format(float(p1[7]) - float(p0[7])), # APG
+                    '*' if isinstance(p1[8], str) or isinstance(p0[8], str)  else p1[8] - p0[8], # HS
+                    '*' if '*' in p1[9] else '{:.4f}'.format(float(p1[9]) - float(p0[9])), # HPG
                     p1[10] - p0[10], # W
                     p1[11] - p0[11], # L
                     '{:.4f}'.format(float(p1[12]) - float(p0[12])), # W/L
@@ -262,9 +272,182 @@ class R6Tracker():
                 print('\nRanked Cumulative Progress:')
                 pretty_print(prog_table)
 
-        #if casual:
+        if casual:
             
-        #if gun:
+            casual_stats = [6,7,8,9,10,11]
+
+            # Get all stats first
+            sqcmd = 'SELECT dt, ranked_won, ranked_lost, {} FROM players, records, stats WHERE players.name="{}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt BETWEEN "{}" AND "{}";'.format(
+                ', '.join([STAT_LIST[i][1] for i in casual_stats]),
+                name,
+                start_dt,
+                end_dt
+                )
+            self.cursor.execute(sqcmd)
+            allrecords = self.cursor.fetchall()
+            
+            if allrecords is None or len(allrecords) == 0:
+                print('WARNING: No casual game records between requested date-times.')
+            else: 
+                
+                # Casual Progress: In-between stats
+                
+                # The structure:
+                prog_table = [['Record', '# Games', 'K', 'A', 'D', 'K/D', 'HS', 'W', 'L', 'W/L']]
+                r0 = allrecords[0]
+                for r1 in allrecords:
+                    if r1['casual_won'] + r1['casual_lost'] - r0['casual_won'] - r0['casual_lost'] < 0.5:
+                        # No ranked games between records
+                        r0 = r1
+                        continue
+                    inaccuracy = False
+                    if (r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] > 0.5):
+                        inaccuracy = True
+                    prog_table.append([
+                        #r0['dt'].split('.')[0] + ' to ' + r1['dt'].split('.')[0],
+                        r0['dt'].split('.')[0],
+                        r1['casual_won'] + r1['casual_lost'] - r0['casual_won'] - r0['casual_lost'],
+                        r1['casual_kill'] - r0['casual_kill'],
+                        '*' if inaccuracy else r1['assists'] - r0['assists'],
+                        r1['casual_death'] - r0['casual_death'],
+                        '{:.3f}'.format((r1['casual_kill'] - r0['casual_kill'])/max(1,r1['casual_death'] - r0['casual_death'])),
+                        '*' if inaccuracy else r1['headshots'] - r0['headshots'],
+                        r1['casual_won'] - r0['casual_won'],
+                        r1['casual_lost'] - r0['casual_lost'],
+                        '{:.3f}'.format((r1['casual_won'] - r0['casual_won'])/max(1,r1['casual_lost'] - r0['casual_lost'])),
+                        ])
+                    r0 = r1
+                prog_table.append([allrecords[-1]['dt'].split('.')[0]] + ['']*9)
+                print('\nCasual In-Between Progress:')
+                pretty_print(prog_table)
+
+
+                # Casual Cumulative Progress:
+
+                # The structure:
+                prog_table = [['Record', '# Games', 'K', 'D', 'K/D', 'KPG', 'Assists', 'APG', 'Headshots', 'HPG', 'W', 'L', 'W/L']]
+                r0 = allrecords[0]
+                for r1 in allrecords:
+                    if r1 != r0  and (r1['casual_won'] + r1['casual_lost'] - r0['casual_won'] - r0['casual_lost'] < 0.5):
+                        # No ranked games between records
+                        r0 = r1
+                        continue
+                    inaccuracy = False
+                    if (r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] > 0.5):
+                        inaccuracy = True
+                    prog_table.append([
+                        r1['dt'].split('.')[0],
+                        r1['casual_won'] + r1['casual_lost'],
+                        r1['casual_kill'],
+                        r1['casual_death'],
+                        '{:.4f}'.format((r1['casual_kill'])/max(1,r1['casual_death'])),
+                        '{:.4f}'.format((r1['casual_kill'])/max(1,r1['casual_won'] + r1['casual_lost'])),
+                        '*' if inaccuracy else r1['assists'],
+                        '*' if inaccuracy else '{:.4f}'.format(r1['assists']/max(1,r1['casual_won'] + r1['casual_lost'])),
+                        '*' if inaccuracy else r1['headshots'],
+                        '*' if inaccuracy else '{:.4f}'.format(r1['headshots']/max(1,r1['casual_won'] + r1['casual_lost'])),
+                        r1['casual_won'],
+                        r1['casual_lost'],
+                        '{:.4f}'.format((r1['casual_won'])/max(1,r1['casual_lost']))
+                        ])
+                    r0 = r1
+                p0 = prog_table[1]
+                p1 = prog_table[-1]
+                
+                diff = [
+                    '(Diff)',
+                    p1[1] - p0[1], # Games
+                    p1[2] - p0[2], # K
+                    p1[3] - p0[3], # D
+                    '{:.4f}'.format(float(p1[4]) - float(p0[4])), # K/D
+                    '{:.4f}'.format(float(p1[5]) - float(p0[5])), # KPG
+                    '*' if isinstance(p1[6], str) or isinstance(p0[6], str) else p1[6] - p0[6], # A
+                    '*' if '*' in p1[7] else '{:.4f}'.format(float(p1[7]) - float(p0[7])), # APG
+                    '*' if isinstance(p1[8], str) or isinstance(p0[8], str) else p1[8] - p0[8], # HS
+                    '*' if '*' in p1[9] else '{:.4f}'.format(float(p1[9]) - float(p0[9])), # HPG
+                    p1[10] - p0[10], # W
+                    p1[11] - p0[11], # L
+                    '{:.4f}'.format(float(p1[12]) - float(p0[12])) # W/L
+                    ]
+                prog_table.append(diff)
+                print('\nCasual Cumulative Progress:')
+                pretty_print(prog_table)
+            
+            
+        if gun:
+            
+            gun_stats = list(range(12,39))
+            
+            # Get all stats first
+            sqcmd = 'SELECT dt, ranked_won, ranked_lost, casual_won, casual_lost, headshots, ranked_kill, casual_kill, {} FROM players, records, stats WHERE players.name="{}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt BETWEEN "{}" AND "{}";'.format(
+                ', '.join([STAT_LIST[i][1] for i in gun_stats]),
+                name,
+                start_dt,
+                end_dt
+                )
+            self.cursor.execute(sqcmd)
+            allrecords = self.cursor.fetchall()
+            
+            if allrecords is None or len(allrecords) == 0:
+                print('WARNING: No records between requested date-times.')
+            else: 
+                
+                # Gun Progress: In-between stats
+                print('WARNING: Ubi does not update bullets fired stats sometimes, ignore these columns if it is constant accross records.')
+                
+                # The structure:
+                gun_table = [['Record', '# Games', 'Kills', 'HS'] + [STAT_LIST[i][2] for i in gun_stats]]
+                r0 = allrecords[0]
+                for r1 in allrecords:
+                    if r1 == r0:
+                        r0 = r1
+                        continue
+                    new_row = [r0['dt'].split('.')[0],
+                               (r1['ranked_won'] + r1['casual_won'] + r1['ranked_lost'] + r1['casual_lost']) - (r0['ranked_won'] + r0['casual_won'] + r0['ranked_lost'] + r0['casual_lost']),
+                               r1['ranked_kill'] + r1['casual_kill'] - r0['ranked_kill'] - r0['casual_kill'],
+                               r1['headshots'] - r0['headshots']]
+                    for i in gun_stats:
+                        cs = STAT_LIST[i][1]
+                        new_row.append(r1[cs] - r0[cs])
+                    gun_table.append(new_row)
+                    r0 = r1
+                gun_table.append([allrecords[-1]['dt'].split('.')[0]] + ['']*(len(gun_table[0])-1))
+                print('\nGun Stats In-Between Progress:')
+                pretty_print(gun_table)
+
+                # Gun Cumulative Progress:
+
+                # The structure:
+                gun_table = [['Record', '# Games', 'Kills', 'HS'] + [STAT_LIST[i][2] for i in gun_stats]]
+                r0 = allrecords[0]
+                for r1 in allrecords:
+                    new_row = [
+                        r1['dt'].split('.')[0],
+                        r1['ranked_won'] + r1['casual_won'] + r1['ranked_lost'] + r1['casual_lost'],
+                        r1['ranked_kill'] + r1['casual_kill'],
+                        r1['headshots']
+                        ]
+                    for i in gun_stats:
+                        cs = STAT_LIST[i][1]
+                        new_row.append(r1[cs])
+                    gun_table.append(new_row)
+                    r0 = r1
+                p0 = gun_table[1]
+                p1 = gun_table[-1]
+                
+                diff = [
+                    '(Diff)',
+                    p1[1] - p0[1], # Games
+                    p1[2] - p0[2], # Kills
+                    p1[3] - p0[3], # HS
+                    ]
+                for i in range(4, len(gun_table[0])):
+                    diff.append(p1[i] - p0[i])
+                gun_table.append(diff)
+                print('\nGun Stats Cumulative Progress:')
+                pretty_print(gun_table)
+            
+            
         
         pass
 
