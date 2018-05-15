@@ -1,12 +1,9 @@
 from constants import *
-from secrets import *
 import requests
 from requests.auth import HTTPBasicAuth
 import json
 import pprint
 import os.path
-
-
 
 class UbiConnection:
     '''
@@ -89,7 +86,8 @@ class UbiConnection:
             'Ubi-LocaleCode': 'en-US',
             'Accept-Language': 'en-US,en;q=0.9'
         }
-        r = requests.post(LOGIN_URL, headers=HEADERS, auth=HTTPBasicAuth(self.SECRET_USERNAME, self.SECRET_PASSWORD))
+        payload = {'rememberMe': 'true'}
+        r = requests.post(LOGIN_URL, headers=HEADERS, auth=HTTPBasicAuth(self.SECRET_USERNAME, self.SECRET_PASSWORD), json=payload)
         if r.status_code == 200:
             self.session = json.loads(r.text)
             f = open('info.txt', 'w')
@@ -97,8 +95,11 @@ class UbiConnection:
             f.close()
             print('Created a new session successfully.')
         else:
-            raise Exception('ERROR: Login request failed:')
+            #raise Exception('ERROR: Login request failed:')
+            print(r)
+            print(type(r))
             pprint.pprint(r.text)
+            
 
     '''
     Reads the info.txt file for current session information
@@ -110,7 +111,7 @@ class UbiConnection:
     '''
     Creates HTTP requests and parses results as dictionary
     '''
-    def get(self, url, params={}):
+    def get(self, url, params={}, force=True):
         headers = {
             'Ubi-AppId': UBI_APP_ID,
             'Content-Type': 'application/json; charset=UTF-8',
@@ -127,7 +128,14 @@ class UbiConnection:
             return json.loads(r.text)
             print(r)
         else:
-            return None
+            # Try logging in and send request again
+            if force:
+                print('INFO: Connection failed, renewing connection to server.')
+                self.login()
+                r = self.get(url, params, force=False)
+                return r
+            else:
+                return None
 
     '''
     Returns ID of the given player name
@@ -174,7 +182,7 @@ class UbiConnection:
         if r_dict:
             return r_dict['players'][id]
         else:
-            print('ERROR: Cannot get player ranks {}'.format(id))
+            print('ERROR: Cannot get player ranks {}.'.format(id))
             return None
 
     '''
@@ -188,14 +196,8 @@ class UbiConnection:
             tgp_list = [r_dict['results'][id]['generalpvp_matchplayed:infinite'] for id in ids]
             return tgp_list
         else:
-            print('ERROR: Cannot get total games played for requested users...')
+            print('ERROR: Cannot get total games played for requested users.')
             return None
-
-    '''
-    Saves stats to a local database file
-    '''
-    def log_stats(self):
-        pass
 
     '''
     Prints all fields in session
@@ -205,5 +207,4 @@ class UbiConnection:
 
 if __name__ == '__main__':
     # UbiConnection.encrypt_to_file(your_uplay_mail, your_uplay_password, your_master_password)
-    # u = UbiConnection(your_master_password)
     pass
