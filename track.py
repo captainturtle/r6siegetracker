@@ -156,13 +156,21 @@ class R6Tracker():
             ranked_stats = [2,3,4,5,10,11]
 
             # Get all stats first
-            sqcmd = 'SELECT dt, casual_won, casual_lost, {}, {} FROM players, records, stats WHERE players.name="{}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt BETWEEN "{}" AND "{}";'.format(
-                ', '.join([STAT_LIST[i][1] for i in ranked_stats]), 
-                ', '.join([i[1] for i in PROGRESS_LIST]),
-                name,
-                start_dt,
-                end_dt
-                )
+            sqcmd = '''
+            SELECT *
+            FROM(
+            SELECT dt, casual_won, casual_lost, {ranked}, {ranks} 
+            FROM players, records, stats 
+            WHERE players.name="{name}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt <= "{st}" ORDER BY stats.id DESC LIMIT 1
+            )
+            UNION
+            SELECT *
+            FROM(
+            SELECT dt, casual_won, casual_lost, {ranked}, {ranks} 
+            FROM players, records, stats 
+            WHERE players.name="{name}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt BETWEEN "{st}" AND "{et}"
+            );
+            '''.format(ranked=', '.join([STAT_LIST[i][1] for i in ranked_stats]), ranks=', '.join([i[1] for i in PROGRESS_LIST]), name=name, st=start_dt, et=end_dt)
             self.cursor.execute(sqcmd)
             allrecords = self.cursor.fetchall()
             
@@ -466,6 +474,43 @@ class R6Tracker():
         u = self.u
         self.cursor.execute('SELECT * FROM players;')
         return self.cursor.fetchall()
+
+    '''
+    Returns a list of last records of all players in database
+    '''
+    def get_last_records(self):
+        sqcmd = '''SELECT players.id, players.name, stats.*
+            FROM players, stats
+            WHERE
+                stats.id = (SELECT MAX(id) FROM stats as s2 WHERE s2.player_id = players.id)
+            ORDER BY players.id ASC
+        '''
+        self.cursor.execute(sqcmd)
+        allplayers = self.cursor.fetchall()
+        comp_table = [['Player', '# Games', 'Time Played', 'K', 'D', 'K/D', 'HS', 'HPK', 'W', 'L', 'W/L', 'Rank', 'Max Rank', 'MMR',  'Max MMR', 'Skill', 'Skill Std']]
+        
+        for p in allplayers:
+            comp_table.append([
+                p['name'],
+                p['match_played'],
+                p['time_played'],
+                p['ranked_kill'],
+                p['ranked_death'],
+                '{:.4f}'.format(p['ranked_kill']/max(1,p['ranked_death'])),
+                p['headshots'],
+                '{:.4f}'.format(p['headshots']/max(1,p['ranked_kill']+p['casual_kill'])),
+                p['ranked_won'],
+                p['ranked_lost'],
+                '{:.4f}'.format(p['ranked_won']/max(1,p['ranked_lost'])),
+                RANKS[round(p['rank'])],
+                RANKS[round(p['max_rank'])],
+                '{:.3f}'.format(p['mmr']),
+                '{:.3f}'.format(p['max_mmr']),
+                '{:.3f}'.format(p['skill_mean']),
+                '{:.3f}'.format(p['skill_std'])
+                ])
+        print('Player comparison:')
+        pretty_print(comp_table)
 
     '''
     Prints all table contents to console
