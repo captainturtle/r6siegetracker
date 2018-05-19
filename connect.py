@@ -174,10 +174,10 @@ class UbiConnection:
     '''
     Returns the matchmatking stats of the requested user
     '''
-    def get_rank(self, id=None, region='ncsa'):
+    def get_rank(self, id=None, region='ncsa', season=-1):
         if id is None:
             id = self.session['userId']
-        REQ_URL = PROGRESS_URL.format(region=region, id=id)
+        REQ_URL = PROGRESS_URL.format(region=region, id=id, season=season)
         r_dict = self.get(REQ_URL)
         if r_dict:
             return r_dict['players'][id]
@@ -204,7 +204,3 @@ class UbiConnection:
     '''
     def print_session(self):
         pprint.pprint(self.session)
-
-if __name__ == '__main__':
-    # UbiConnection.encrypt_to_file(your_uplay_mail, your_uplay_password, your_master_password)
-    pass

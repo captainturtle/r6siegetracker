@@ -49,7 +49,7 @@ PLAYER_URL = 'https://public-ubiservices.ubi.com/v2/profiles?platformType=uplay&
 STATS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={id}&' +\
             'statistics='+','.join(set(s[3] for s in STAT_LIST))
 PROFILE_PIC = 'https://ubisoft-avatars.akamaized.net/{id}/default_146_146.png?appId=39baebad-39e5-4552-8c25-2c9b919064e2'
-PROGRESS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/r6karma/players?board_id=pvp_ranked&region_id={region}&profile_ids={id}&season_id=-1'
+PROGRESS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/r6karma/players?board_id=pvp_ranked&region_id={region}&profile_ids={id}&season_id={season}'
 GAME_PLAYERD_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&statistics=generalpvp_matchplayed'
 
 RANKS = [
@@ -74,4 +74,18 @@ RANKS = [
     'Platinum II',
     'Platinum I',
     'Diamond'
+    ]
+
+SEASONS = [
+    '',
+    '',
+    'DUST LINE',
+    'SKULL RAIN',
+    'RED CROW',
+    'VELVET SHELL',
+    'HEALTH',
+    'BLOOD ORCHID',
+    'WHITE NOISE',
+    'CHIMERA',
+    'PARA BELLUM'
     ]
