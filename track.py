@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from connect import UbiConnection
-from constants import STAT_LIST, PROGRESS_LIST, RANKS, REGIONS, SEASONS
+from constants import STAT_LIST, PROGRESS_LIST, RANKS, REGIONS, SEASONS, OPERATOR_COLUMN_LIST, SORTED_OPERATOR_LIST, DB_VERSION
 import datetime
 
 class R6Tracker():
@@ -18,7 +18,7 @@ class R6Tracker():
         self.db.row_factory = sqlite3.Row
         self.cursor = self.db.cursor()
         self.u = ubiconnect
-        print('Initialized the tracker.')
+        print('INFO: Initialized the tracker.')
 
     '''
     Creates database files for the first use
@@ -27,6 +27,24 @@ class R6Tracker():
         self.db = sqlite3.connect('rainbow.db', check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.cursor = self.db.cursor()
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS
+                               dbinfo(tag INTEGER UNIQUE, value VARCHAR(100))
+                            ''')
+        # Version check
+        self.cursor.execute('SELECT * FROM dbinfo WHERE tag="version"')
+        res = self.cursor.fetchone()
+        if res is None:
+            # New db - set the version
+            self.cursor.execute('INSERT INTO dbinfo (tag, value) VALUES ("version", {});'.format(DB_VERSION))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("install_date", "{}");'.format(datetime.datetime.now()))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("update_date", NULL);')
+            self.db.commit()
+        else:
+            print('Tracker database exists (DB version: {})'.format(res['value']))
+            if DB_VERSION != int(res['value']):
+                print('An update is needed! DB version of the tracker object should be {}, updating.'.format(DB_VERSION))
+                self.update_db()
+
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS 
                                players(id INTEGER PRIMARY KEY AUTOINCREMENT,
                                        name VARCHAR(100), 
@@ -47,9 +65,24 @@ class R6Tracker():
                                      {} FLOAT,
                                      PRIMARY KEY (player_id, season));
                             '''.format(' FLOAT, '.join(p[1] for p in PROGRESS_LIST)))
-        # Operator table
+        self.cursor.execute('''CREATE TABLE IF NOT EXISTS
+                               operators(player_id INTEGER, record_id INTEGER,
+                                         {} ,
+                                         PRIMARY KEY (player_id, record_id))
+                            '''.format(', '.join(o[2] + ' INTEGER' for o in OPERATOR_COLUMN_LIST)))
         self.db.commit()
-        print('Installed database rainbow.db!')
+        print('INFO: Installed or updated database rainbow.db.')
+
+    '''
+    Updates the database (new operators, etc..)
+    '''
+    def update_db(self):
+        # We only need to update operator table (when a new season comes out)
+        self.cursor.execute('PRAGMA table_info(operators);')
+        res = self.cursor.fetchall()
+        for i in res:
+            print(tuple(i))
+        # TODO FINISH THIS ONE!
 
     '''
     Adds a new player to the database
@@ -73,7 +106,7 @@ class R6Tracker():
         self.cursor.execute('INSERT OR IGNORE INTO players (name, uplay_id, region) VALUES (?,?,?);',(name,id, region))
         self.db.commit()
         if self.cursor.rowcount == 1:
-            print('Added player {} (ID={})'.format(name, id))
+            print('INFO: Added player {} (ID={})'.format(name, id))
         else:
             print('WARNING: Could not add player {}, possible duplicate'.format(name))
 
@@ -86,7 +119,7 @@ class R6Tracker():
         self.cursor.execute('DELETE FROM players WHERE uplay_id = "{}"'.format(id))
         self.db.commit()
         if self.cursor.rowcount == 1:
-            print('Removed player {} (ID={})'.format(name, id))
+            print('INFO: Removed player {} (ID={})'.format(name, id))
         else:
             print('WARNING: Could not remove player {}, does not exist!'.format(name))
 
@@ -94,29 +127,38 @@ class R6Tracker():
     Creates an entry in records table, it checks all players record only those who have played games since the last record
     '''
     def save_state(self, verbose=False):
+        # Get a list of all players
         u = self.u
         players = self.get_all_players()
+        
+        # Check if there are any updates
         new_save = self.is_save_required(players)
         if not any(new_save):
             print('Checked the stats, no updates have been found.')
             return
+        
+        # Crete a new checkpoint
         print('Getting new records...')
         dt = str(datetime.datetime.now())
         # Create a new record point
         sqcmd = 'INSERT INTO records(dt) VALUES("{}")'.format(dt)
         self.cursor.execute(sqcmd)
         record_id = self.cursor.lastrowid
+        # Get all stats
+        stats = u.get_stats([p['uplay_id'] for p in players])
+        ops = u.get_operator_stats([p['uplay_id'] for p in players])
         for i, player in enumerate(players):
+            p_stat = stats[i]
+            p_op_stat = ops[i]
             if not new_save[i]:
                 continue
             print('Getting current stats for {}'.format(player['name']))
             # Get stats
-            stats = u.get_stats(player['uplay_id'])
             rank = u.get_rank(player['uplay_id'], region=player['region'])
             all_stats = []
             for s in STAT_LIST:
                 try:
-                    all_stats.append(str(stats[s[0]]))
+                    all_stats.append(str(p_stat[s[0]]))
                 except: # When a specific stat is not available (e.g. never played ranked...)
                     all_stats.append('0')
                 if verbose:
@@ -129,7 +171,12 @@ class R6Tracker():
             # Insert to DB
             sqcmd = 'INSERT INTO stats VALUES(NULL,{},{},{});'.format(player['id'], record_id, merged_stats)
             self.cursor.execute(sqcmd)
+            op_merged_stats = ', '.join(str(p_op_stat[op[0]]) if op[0] in p_op_stat else '0' for op in OPERATOR_COLUMN_LIST)
+            opsqcmd = 'INSERT INTO operators VALUES({}, {}, {});'.format(player['id'], record_id, op_merged_stats)
+            self.cursor.execute(opsqcmd)
+            #self.cursor.execute(sqcmd)
         self.db.commit()
+        print('Saved the current stats to DB.')
 
     '''
     Returns a list of booleans for players whose stats should be updated
@@ -148,6 +195,12 @@ class R6Tracker():
                 lastgames[i] = 0
             else:
                 lastgames[i] = lastgame[0]['match_played']
+            sqcmd = 'SELECT * FROM operators WHERE player_id = {};'.format(player[0])
+            self.cursor.execute(sqcmd)
+            lastgame = self.cursor.fetchall()
+            if len(lastgame) == 0:
+                print('No operator stats exists in DB for {}'.format(player['name']))
+                new_save[i] = True
         # Or the total games played is greater than previous record
         u = self.u
         games = u.get_total_games([player['uplay_id'] for player in player_list])
@@ -180,7 +233,11 @@ class R6Tracker():
     operator: boolean, optional
         Option for requesting operator stats
     '''
-    def get_player_progress(self, name, start_dt, end_dt, increment=0, ranked=True, casual=False, gun=False, operator=False):
+    def get_player_progress(self, name, start_dt, end_dt=None, increment=0, ranked=True, casual=False, gun=False, operator=False):
+        if end_dt is None:
+            end_dt = str(datetime.datetime.now())
+        
+        # Ranked stats
         if ranked:
             ranked_stats = [2,3,4,5,10,11]
             
@@ -371,6 +428,7 @@ class R6Tracker():
                 print('\nRanked Cumulative Progress:')
                 pretty_print(prog_table)
 
+        # Casual stats
         if casual:
             
             casual_stats = [6,7,8,9,10,11]
@@ -573,10 +631,185 @@ class R6Tracker():
                 gun_table.append(diff)
                 print('\nGun Stats Cumulative Progress:')
                 pretty_print(gun_table)
+
+        if operator:
+            if increment==0:
+                sqcmd = '''
+                SELECT *
+                FROM(
+                SELECT dt, operators.*, stats.ranked_won, stats.ranked_lost, stats.casual_won, stats.casual_lost
+                FROM players, records, operators, stats
+                WHERE players.name="{name}" AND 
+                      players.id=operators.player_id AND
+                      records.id=operators.record_id AND 
+                      players.id=stats.player_id AND
+                      records.id=stats.record_id AND
+                      records.dt <= "{st}" ORDER BY records.id DESC LIMIT 1
+                )
+                UNION
+                SELECT *
+                FROM(
+                SELECT dt, operators.*, stats.ranked_won, stats.ranked_lost, stats.casual_won, stats.casual_lost
+                FROM players, records, operators, stats
+                WHERE players.name="{name}" AND 
+                      players.id=operators.player_id AND
+                      records.id=operators.record_id AND 
+                      players.id=stats.player_id AND
+                      records.id=stats.record_id AND
+                      records.dt BETWEEN "{st}" AND "{et}"
+                );
+                '''.format(name=name, st=start_dt, et=end_dt)
+            else:
+                sqcmd = '''
+                SELECT NULL as d_from, NULL as d_to, *
+                FROM(
+                SELECT dt, operators.*, stats.ranked_won, stats.ranked_lost, stats.casual_won, stats.casual_lost
+                FROM players, records, operators, stats
+                WHERE players.name="{name}" AND 
+                      players.id=operators.player_id AND
+                      records.id=operators.record_id AND 
+                      players.id=stats.player_id AND
+                      records.id=stats.record_id AND
+                      records.dt <= "{st}" ORDER BY records.id DESC LIMIT 1
+                )
+                '''
+                
+                daydiff = self.time_diff(start_dt, end_dt)
+                for inc in range(0, daydiff.days+1, increment):
+                    dailyunion = '''
+                    UNION
+                    SELECT date("{{st}}", '+{inc} days') as d_from, date("{{st}}", '+{inc1} days') as d_to, *  FROM(
+                        SELECT dt, operators.*, stats.ranked_won, stats.ranked_lost, stats.casual_won, stats.casual_lost
+                        FROM players, records, operators, stats
+                        WHERE players.name="{{name}}" AND
+                              players.id=operators.player_id AND
+                              records.id=operators.record_id AND
+                              players.id=stats.player_id AND
+                              records.id=stats.record_id AND
+                              dt BETWEEN datetime("{{st}}", '+{inc} days') AND datetime("{{st}}", '+{inc1} days') ORDER BY records.dt DESC LIMIT 1
+                    )
+                    '''.format(inc = inc, inc1 = inc+increment)
+                    sqcmd += dailyunion
+                sqcmd = sqcmd.format(name=name, st=start_dt, et=end_dt)
             
-            
-        
-        pass
+            self.cursor.execute(sqcmd)
+            allrecords = self.cursor.fetchall()
+
+            if allrecords is None or len(allrecords) == 0:
+                print('WARNING: No game records between requested date-times.')
+            elif len(allrecords) == 1:
+                print('WARNING: Only 1 record has been found between date-times.')
+            else: 
+                
+                # Operator Progress: In-Between
+                # The structure:
+                opd_table = [['Record', '# Games', 'Ranked-Won', 'Ranked-Lost', 'Casual-Won', 'Casual-Lost', 'Side', 'Operator', 'Round-Won', 'Round-Lost', 'W/L', 'K', 'D', 'K/D', 'Survival%', 'Time Played']]
+                r0 = allrecords[0]
+                for r1 in allrecords:
+                    if r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] + r1['casual_won'] + r1['casual_lost'] - r0['casual_won'] - r0['casual_lost'] < 0.5:
+                        # No games between records, this should not have happened anyway
+                        r0 = r1
+                        continue
+                    try:
+                        recname = r1['d_from'] + ' to ' + r1['d_to']
+                    except:
+                        recname = r0['dt'].split('.')[0]
+                    prevop = None
+                    # First row
+                    opd_table.append([
+                        recname, # Records
+                        r1['ranked_won'] + r1['ranked_lost'] - r0['ranked_won'] - r0['ranked_lost'] + r1['casual_won'] + r1['casual_lost'] - r0['casual_won'] - r0['casual_lost'], # Games
+                        r1['ranked_won'] - r0['ranked_won'], # Won
+                        r1['ranked_lost'] - r0['ranked_lost'], # Lost
+                        r1['casual_won'] - r0['casual_won'], # Casual won
+                        r1['casual_lost'] - r0['casual_lost'], # Casual lost
+                        ] + ['-']*10)
+                    
+                    # Operator loop
+                    for op in SORTED_OPERATOR_LIST:
+                        opdict = {'played': '{}_tp'.format(op[2]), 'won': '{}_rw'.format(op[2]), 'lost': '{}_rl'.format(op[2]), 'kill': '{}_k'.format(op[2]), 'death': '{}_d'.format(op[2])}
+                        number_of_round = r1[opdict['won']] + r1[opdict['lost']] - r0[opdict['won']] - r0[opdict['lost']]
+                        if  number_of_round < 0.5: # This operator has chosen at least once
+                            continue
+                        try:
+                            side = '' if prevop[3] == op[3] else op[3]
+                        except:
+                            side = op[3]
+                        opd_table.append(['']*6 + [
+                            side, # Side
+                            op[1], # Operator name
+                            r1[opdict['won']] - r0[opdict['won']], # Round won
+                            r1[opdict['lost']] - r0[opdict['lost']], # Round won
+                            '{:.3f}'.format((r1[opdict['won']] - r0[opdict['won']])/max(1,r1[opdict['lost']] - r0[opdict['lost']])), # W/L
+                            r1[opdict['kill']] - r0[opdict['kill']], # K
+                            r1[opdict['death']] - r0[opdict['death']], # D
+                            '{:.3f}'.format((r1[opdict['kill']] - r0[opdict['kill']])/max(1,r1[opdict['death']] - r0[opdict['death']])), # K/D
+                            '{:.2%}'.format((number_of_round - (r1[opdict['death']] - r0[opdict['death']]))/number_of_round), # Survival
+                            r1[opdict['played']] - r0[opdict['played']], # Time played
+                            ])
+                        prevop = op
+                    totalwon = sum([r1[i] - r0[i] for i in r0.keys() if '_rw' in i])
+                    totallost = sum([r1[i] - r0[i] for i in r0.keys() if '_rl' in i])
+                    totalkill = sum([r1[i] - r0[i] for i in r0.keys() if '_k' in i])
+                    totaldeath = sum([r1[i] - r0[i] for i in r0.keys() if '_d' in i])
+                    totaltp =  sum([r1[i] - r0[i] for i in r0.keys() if '_tp' in i])
+                    opd_table.append(['']*6 + [
+                        '(Total)',
+                        '-',
+                        totalwon,
+                        totallost,
+                        '{:.3f}'.format(totalwon/max(1,totallost)),
+                        totalkill,
+                        totaldeath,
+                        '{:.3f}'.format(totalkill/max(1,totaldeath)),
+                        '{:.2%}'.format((totalwon+totallost-totaldeath)/(totalwon+totallost)),
+                        totaltp
+                        ])
+                    r0 = r1
+                # Grand total
+                opd_table.append(['---']*len(opd_table[0]))
+                p1 = allrecords[-1]
+                p0 = allrecords[0]
+                opd_table.append([
+                    '(Grand Total)', # Records
+                    p1['ranked_won'] + p1['ranked_lost'] - p0['ranked_won'] - p0['ranked_lost'] + p1['casual_won'] + p1['casual_lost'] - p0['casual_won'] - p0['casual_lost'], # Games
+                    p1['ranked_won'] - p0['ranked_won'], # Won
+                    p1['ranked_lost'] - p0['ranked_lost'], # Lost
+                    p1['casual_won'] - p0['casual_won'], # Casual won
+                    p1['casual_lost'] - p0['casual_lost'], # Casual lost
+                    ] + ['-']*10)
+                for op in SORTED_OPERATOR_LIST:
+                    opdict = {'played': '{}_tp'.format(op[2]), 'won': '{}_rw'.format(op[2]), 'lost': '{}_rl'.format(op[2]), 'kill': '{}_k'.format(op[2]), 'death': '{}_d'.format(op[2])}
+                    number_of_round = p1[opdict['won']] + p1[opdict['lost']] - p0[opdict['won']] - p0[opdict['lost']]
+                    if  number_of_round < 0.5: # This operator has chosen at least once
+                        continue
+                    try:
+                        side = '' if prevop[3] == op[3] else op[3]
+                    except:
+                        side = op[3]
+                    opd_table.append(['']*6 + [
+                        side, # Side
+                        op[1], # Operator name
+                        p1[opdict['won']] - p0[opdict['won']], # Round won
+                        p1[opdict['lost']] - p0[opdict['lost']], # Round won
+                        '{:.3f}'.format((p1[opdict['won']] - p0[opdict['won']])/max(1,p1[opdict['lost']] - p0[opdict['lost']])), # W/L
+                        p1[opdict['kill']] - p0[opdict['kill']], # K
+                        p1[opdict['death']] - p0[opdict['death']], # D
+                        '{:.3f}'.format((p1[opdict['kill']] - p0[opdict['kill']])/max(1,p1[opdict['death']] - p0[opdict['death']])), # K/D
+                        '{:.2%}'.format((number_of_round - (p1[opdict['death']] - p0[opdict['death']]))/number_of_round), # Survival
+                        p1[opdict['played']] - p0[opdict['played']], # Time played
+                        ])
+                    prevop = op
+                
+                
+                print('\nOperator In-Between Stats')
+                pretty_print(opd_table)
+
+
+                # TODO: Operator Cumulative Progress
+                # Idea: Find operator whose stats has changed, add them to columns, and print changes?
+                
+
 
     '''
     Returns a list of requested players, names should be a list
@@ -691,7 +924,7 @@ class R6Tracker():
     Prints all table contents to console
     '''
     def print_all_db(self):
-        tables = ['players', 'records', 'stats', 'seasons']
+        tables = ['dbinfo', 'players', 'records', 'stats', 'seasons', 'operators']
         for t in tables:
             print(t)
             self.cursor.execute('SELECT * FROM {};'.format(t))
@@ -741,6 +974,12 @@ class R6Tracker():
             return None
         else:
             return rows[0][info]
+
+    '''
+    Updates the names in the database
+    '''
+    def update_names(self):
+        pass
 
     def time_diff(self, start, end):
         mask = '%Y-%m-%d %H:%M:%S.%f'

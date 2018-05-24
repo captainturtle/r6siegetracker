@@ -93,7 +93,7 @@ class UbiConnection:
             f = open('info.txt', 'w')
             json.dump(r.json(), f)
             f.close()
-            print('Created a new session successfully.')
+            print('INFO: Created a new session successfully.')
         else:
             #raise Exception('ERROR: Login request failed:')
             print(r)
@@ -130,7 +130,7 @@ class UbiConnection:
         else:
             # Try logging in and send request again
             if force:
-                print('INFO: Connection failed, renewing connection to server.')
+                print('WARNING: Connection failed (possibly expired), renewing connection to server.')
                 self.login()
                 r = self.get(url, params, force=False)
                 return r
@@ -152,7 +152,6 @@ class UbiConnection:
                 return userid
         else:
             raise Exception('ERROR: Cannot get Uplay ID')
-            return None
 
     def get_level(self):
         pass
@@ -160,13 +159,13 @@ class UbiConnection:
     '''
     Returns stats of the requested user
     '''
-    def get_stats(self, id=None):
-        if id is None:
-            id = self.session['userId']
-        REQ_URL = STATS_URL.format(id=id)
+    def get_stats(self, ids=None):
+        if ids is None:
+            ids = [self.session['userId']]
+        REQ_URL = STATS_URL.format(ids=','.join(ids))
         r_dict = self.get(REQ_URL)
         if r_dict:
-            return r_dict['results'][id]
+            return [r_dict['results'][id] for id in ids]
         else:
             print('ERROR: Cannot get player stats {}'.format(id))
             return None
@@ -174,7 +173,7 @@ class UbiConnection:
     '''
     Returns the matchmatking stats of the requested user
     '''
-    def get_rank(self, id=None, region='ncsa', season=-1):
+    def get_rank(self, id=None, region='ncsa', season=-1): # Todo make ids, try with multiple seasons as well!
         if id is None:
             id = self.session['userId']
         REQ_URL = PROGRESS_URL.format(region=region, id=id, season=season)
@@ -183,6 +182,18 @@ class UbiConnection:
             return r_dict['players'][id]
         else:
             print('ERROR: Cannot get player ranks {}.'.format(id))
+            return None
+
+    def get_operator_stats(self, ids=None):
+        if ids is None:
+            ids = [self.session['userId']]
+        REQ_URL = OPERATOR_URL.format(ids=','.join(ids))
+        r_dict = self.get(REQ_URL)
+        if r_dict:
+            op_list = [r_dict['results'][id] for id in ids]
+            return op_list
+        else:
+            print('ERROR: Cannot get operator stats')
             return None
 
     '''

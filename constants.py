@@ -1,3 +1,7 @@
+# App constants
+DB_VERSION = 2
+
+
 # Constant fields
 UBI_APP_ID = '39baebad-39e5-4552-8c25-2c9b919064e2'
 GUN_LIST = [(1, 'ar', 'Assault Rifle', 'AR'),
@@ -13,6 +17,57 @@ GUN_STAT_LIST = [
     ('weapontypepvp_kills', '{} Kills', 'kill'),
     ('weapontypepvp_headshot', '{} Headshots', 'headshot'),
     ]
+OPERATOR_LIST = [
+    ('2:1', 'Smoke', 'smoke', 'def'),
+    ('2:2', 'Castle', 'castle', 'def'),
+    ('2:3', 'Doc', 'doc', 'def'),
+    ('2:4', 'Glaz', 'glaz', 'atk'),
+    ('2:5', 'Blitz', 'blitz', 'atk'),
+    ('2:6', 'Buck', 'buck', 'atk'),
+    ('2:7', 'Blackbeard', 'bb', 'atk'),
+    ('2:8', 'Capitao', 'capiato', 'atk'),
+    ('2:9', 'Hibana', 'hibana', 'atk'),
+    ('2:A', 'Jackal', 'jackal', 'atk'),
+    ('2:B', 'Ying', 'ying', 'atk'),
+    ('2:C', 'Ela', 'ela', 'def'),
+    ('2:D', 'Dokkaebi', 'dokkaebi', 'atk'),
+    ('3:1', 'Mute', 'mute', 'def'),
+    ('3:2', 'Ash', 'ash', 'atk'),
+    ('3:3', 'Rook', 'rook', 'def'),
+    ('3:4', 'Fuze', 'fuze', 'atk'),
+    ('3:5', 'IQ', 'iq', 'atk'),
+    ('3:6', 'Frost', 'frost', 'def'),
+    ('3:7', 'Valkyrie', 'valkyrie', 'def'),
+    ('3:8', 'Caveira', 'cav', 'def'),
+    ('3:9', 'Echo', 'echo', 'def'),
+    ('3:A', 'Mira', 'mira', 'def'),
+    ('3:B', 'Lesion', 'lesion', 'def'),
+    ('3:C', 'Zofia', 'zofia', 'atk'),
+    ('3:D', 'Vigil', 'vigil', 'def'),
+    ('3:E', 'Lion', 'lion', 'atk'),
+    ('4:1', 'Sledge', 'sledge', 'atk'),
+    ('4:2', 'Pulse', 'pulse', 'def'),
+    ('4:3', 'Twitch', 'twitch', 'atk'),
+    ('4:4', 'Kapkan', 'kapkan', 'def'),
+    ('4:5', 'Jager', 'jager', 'def'),
+    ('4:E', 'Finka', 'finka', 'atk'),
+    ('5:1', 'Thatcher', 'thatcher', 'atk'),
+    ('5:2', 'Thermite', 'thermite', 'atk'),
+    ('5:3', 'Montagne', 'montagne', 'atk'),
+    ('5:4', 'Tachanka', 'tach', 'def'),
+    ('5:5', 'Bandit', 'bandit', 'def')
+    ]
+SORTED_OPERATOR_LIST = sorted(OPERATOR_LIST, key=lambda x: (x[3], x[1]))
+OPERATOR_STAT_LIST = [
+    ('timeplayed', 'Time Played', 'tp'),
+    ('roundwon', 'Round Won', 'rw'),
+    ('roundlost', 'Round Lost', 'rl'),
+    ('kills', 'Kills', 'k'),
+    ('death', 'Deaths', 'd')
+    ]
+REGIONS = [('America', 'ncsa'),
+           ('Europe', 'emea'),
+           ('Asia', 'apac')]
 
 # DB fields: [0] JSON name, [1] DB column name, [2] User-friendly column name, [3] API request field name
 STAT_LIST = [
@@ -39,18 +94,17 @@ PROGRESS_LIST = [
     ('wins', 'season_wins', 'Season Wins'),
     ('losses', 'season_losses', 'Season Losses')
     ]
-REGIONS = [('America', 'ncsa'),
-           ('Europe', 'emea'),
-           ('Asia', 'apac')]
+OPERATOR_COLUMN_LIST = [('operatorpvp_{}:{}:infinite'.format(s[0], o[0]), '{} {}'.format(o[1], s[1])  , o[2] + '_' + s[2]) for o in OPERATOR_LIST for s in OPERATOR_STAT_LIST]
 
 # Entry points
 LOGIN_URL = 'https://uplayconnect.ubi.com/ubiservices/v2/profiles/sessions'
 PLAYER_URL = 'https://public-ubiservices.ubi.com/v2/profiles?platformType=uplay&{key}={val}'
-STATS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={id}&' +\
+STATS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&' +\
             'statistics='+','.join(set(s[3] for s in STAT_LIST))
 PROFILE_PIC = 'https://ubisoft-avatars.akamaized.net/{id}/default_146_146.png?appId=39baebad-39e5-4552-8c25-2c9b919064e2'
 PROGRESS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/r6karma/players?board_id=pvp_ranked&region_id={region}&profile_ids={id}&season_id={season}'
 GAME_PLAYERD_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&statistics=generalpvp_matchplayed'
+OPERATOR_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&statistics=operatorpvp_timeplayed,operatorpvp_roundwon,operatorpvp_roundlost,operatorpvp_kills,operatorpvp_death'
 
 RANKS = [
     'Unranked',
@@ -78,7 +132,7 @@ RANKS = [
 
 SEASONS = [
     '',
-    '',
+    'BLACK ICE',
     'DUST LINE',
     'SKULL RAIN',
     'RED CROW',
@@ -89,3 +143,8 @@ SEASONS = [
     'CHIMERA',
     'PARA BELLUM'
     ]
+
+# REFERENCES
+# Operator info json object: https://ubistatic-a.akamaihd.net/0058/prod/assets/data/operators.79229c6d.json
+
+
