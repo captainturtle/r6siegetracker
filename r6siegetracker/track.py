@@ -879,6 +879,8 @@ class R6Tracker():
             seasons = self.cursor.fetchall()
             if len(seasons) == 0:
                 self.save_season_stats()
+                self.cursor.execute(sqcmd)
+                seasons = self.cursor.fetchall()
             player_table = [['Season Name', 'Season', 'W', 'L', 'W/L', 'Last Rank', 'MMR', 'Max Rank', 'Max MMR', 'Skill', 'Skill-Low', 'Skill-High']]
             for s in seasons:
                 if s['season_wins'] + s['season_losses'] <= 0.5:
