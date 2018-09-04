@@ -1,4 +1,4 @@
-from constants import *
+from r6siegetracker.constants import *
 import requests
 from requests.auth import HTTPBasicAuth
 import json
@@ -9,16 +9,21 @@ class UbiConnection:
     '''
     UbiConnection provides functionality to connect Ubisoft servers and pull stats data
     '''
-    
+
     def __init__(self, master_password=None):
 
+        self.connected = False
+
         if not os.path.exists('login.txt'):
-            raise Exception('You need to have login.txt in the directory, use UbiConnection.encyrpt_to_file function')
+            raise Exception('You need to have login.txt in the directory, use UbiConnection.encrypt_to_file function')
         else:
             try:
-                self.SECRET_USERNAME, self.SECRET_PASSWORD = UbiConnection.decrypt_from_file(master_password)
+                try:
+                    self.SECRET_USERNAME, self.SECRET_PASSWORD = UbiConnection.decrypt_from_file(master_password)
+                except:
+                    raise Exception('Wrong master password! Try again or recreate login.txt using UbiConnection.encrypt_to_file!')
             except:
-                raise Exception('Wrong master password! Try again or recreate login.txt using UbiConnection.encrypt_to_file!')
+                return
         self.session = {}
         # Session information
         if os.path.exists('info.txt'):
@@ -76,6 +81,26 @@ class UbiConnection:
             return tuple(raw_info.split())
 
     '''
+    Tries logging in with custom settings to see if the mail / password combination is valid.
+    Does not store passwords or session info.
+    '''
+    @classmethod
+    def validate(cls, username, password):
+        HEADERS = {
+            'Ubi-AppId': UBI_APP_ID,
+            'Content-Type': 'application/json; charset=UTF-8',
+            'User-Agent': 'Mozilla/5.0',
+            'Ubi-LocaleCode': 'en-US',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
+        payload = {'rememberMe': 'true'}
+        r = requests.post(LOGIN_URL, headers=HEADERS, auth=HTTPBasicAuth(username, password), json=payload)
+        if r.status_code == 200:
+            return True
+        else:
+            return False
+
+    '''
     Creates a ubisoft session and records the ticket
     '''
     def login(self):
@@ -94,11 +119,15 @@ class UbiConnection:
             json.dump(r.json(), f)
             f.close()
             print('INFO: Created a new session successfully.')
+            self.connected = True
+            return True
         else:
             #raise Exception('ERROR: Login request failed:')
             print(r)
             print(type(r))
             pprint.pprint(r.text)
+            self.connected = False
+            return False
             
 
     '''
@@ -107,6 +136,7 @@ class UbiConnection:
     def read_ticket(self):
         f = open('info.txt', 'r')
         self.session = json.load(f)
+        self.connected = True
 
     '''
     Creates HTTP requests and parses results as dictionary
@@ -145,7 +175,7 @@ class UbiConnection:
         r_dict = self.get(REQ_URL)
         if r_dict:
             if len(r_dict['profiles']) == 0:
-                print('ERROR: No such name exists in Uplay database!')
+                print('ERROR: No such name exists in Uplay database: {}'.format(name))
                 return None
             else:
                 userid = r_dict['profiles'][0]['profileId']
@@ -157,12 +187,54 @@ class UbiConnection:
         pass
 
     '''
+    Returns info for a player
+    '''
+    def get_player_by_id(self, id):
+        REQ_URL = PROFILE_URL.format(id)
+        r_dict = self.get(REQ_URL)
+        if r_dict:
+            if len(r_dict['profiles']) == 0:
+                print('ERROR: Player could not found with ID {}'.format(id))
+                return None
+            else:
+                userinfo = r_dict['profiles'][0]
+                return userinfo
+        else:
+            raise Exception('ERROR: Cannot find ID')
+
+    '''
     Returns stats of the requested user
     '''
     def get_stats(self, ids=None):
         if ids is None:
             ids = [self.session['userId']]
         REQ_URL = STATS_URL.format(ids=','.join(ids))
+        r_dict = self.get(REQ_URL)
+        if r_dict:
+            return [r_dict['results'][id] for id in ids]
+        else:
+            print('ERROR: Cannot get player stats {}'.format(id))
+            return None
+
+    def get_operator_stats(self, ids=None):
+        if ids is None:
+            ids = [self.session['userId']]
+        REQ_URL = OPERATOR_URL.format(ids=','.join(ids))
+        r_dict = self.get(REQ_URL)
+        if r_dict:
+            op_list = [r_dict['results'][id] for id in ids]
+            return op_list
+        else:
+            print('ERROR: Cannot get operator stats')
+            return None
+
+    '''
+    Returns gun stats of the requested users
+    '''
+    def get_gun_stats(self, ids=None):
+        if ids is None:
+            ids = [self.session['userId']]
+        REQ_URL = GUN_URL.format(ids=','.join(ids))
         r_dict = self.get(REQ_URL)
         if r_dict:
             return [r_dict['results'][id] for id in ids]
@@ -184,18 +256,6 @@ class UbiConnection:
             print('ERROR: Cannot get player ranks {}.'.format(id))
             return None
 
-    def get_operator_stats(self, ids=None):
-        if ids is None:
-            ids = [self.session['userId']]
-        REQ_URL = OPERATOR_URL.format(ids=','.join(ids))
-        r_dict = self.get(REQ_URL)
-        if r_dict:
-            op_list = [r_dict['results'][id] for id in ids]
-            return op_list
-        else:
-            print('ERROR: Cannot get operator stats')
-            return None
-
     '''
     Returns the total number of games played for each user
     '''
@@ -204,7 +264,12 @@ class UbiConnection:
         REQ_URL = GAME_PLAYERD_URL.format(ids=','.join(ids))
         r_dict = self.get(REQ_URL)
         if r_dict:
-            tgp_list = [r_dict['results'][id]['generalpvp_matchplayed:infinite'] for id in ids]
+            tgp_list = []
+            for id in ids:
+                try:
+                    tgp_list.append(r_dict['results'][id]['generalpvp_matchplayed:infinite'])
+                except KeyError:
+                    tgp_list.append(0)
             return tgp_list
         else:
             print('ERROR: Cannot get total games played for requested users.')

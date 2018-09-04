@@ -1,3 +1,3 @@
-from connect import UbiConnection
-from track import R6Tracker
-from constants import *
+from r6siegetracker.connect import UbiConnection
+from r6siegetracker.track import R6Tracker
+from r6siegetracker.constants import *

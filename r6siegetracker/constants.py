@@ -1,5 +1,5 @@
 # App constants
-DB_VERSION = 2
+DB_VERSION = 6
 
 
 # Constant fields
@@ -31,6 +31,7 @@ OPERATOR_LIST = [
     ('2:B', 'Ying', 'ying', 'atk'),
     ('2:C', 'Ela', 'ela', 'def'),
     ('2:D', 'Dokkaebi', 'dokkaebi', 'atk'),
+    ('2:F', 'Maestro', 'maestro', 'def'),
     ('3:1', 'Mute', 'mute', 'def'),
     ('3:2', 'Ash', 'ash', 'atk'),
     ('3:3', 'Rook', 'rook', 'def'),
@@ -45,6 +46,7 @@ OPERATOR_LIST = [
     ('3:C', 'Zofia', 'zofia', 'atk'),
     ('3:D', 'Vigil', 'vigil', 'def'),
     ('3:E', 'Lion', 'lion', 'atk'),
+    ('3:F', 'Alibi', 'alibi', 'def'),
     ('4:1', 'Sledge', 'sledge', 'atk'),
     ('4:2', 'Pulse', 'pulse', 'def'),
     ('4:3', 'Twitch', 'twitch', 'atk'),
@@ -83,7 +85,8 @@ STAT_LIST = [
     ('casualpvp_matchlost:infinite', 'casual_lost', 'Casual Lost', 'casualpvp_matchlost'),
     ('generalpvp_killassists:infinite', 'assists', 'Assists', 'generalpvp_killassists'),
     ('generalpvp_headshot:infinite', 'headshots', 'Headshots', 'generalpvp_headshot')
-    ] + [('{}:{}:infinite'.format(s[0], g[0]), '{}_{}'.format(s[2], g[1]), s[1].format(g[3]), s[0]) for g in GUN_LIST for s in GUN_STAT_LIST]
+    ]
+GUN_COLUMN_LIST = [('{}:{}:infinite'.format(s[0], g[0]), '{}_{}'.format(s[2], g[1]), s[1].format(g[3]), s[0]) for g in GUN_LIST for s in GUN_STAT_LIST]
 PROGRESS_LIST = [
     ('mmr', 'mmr', 'MMR'),
     ('max_mmr', 'max_mmr', 'Max MMR'),
@@ -105,6 +108,9 @@ PROFILE_PIC = 'https://ubisoft-avatars.akamaized.net/{id}/default_146_146.png?ap
 PROGRESS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/r6karma/players?board_id=pvp_ranked&region_id={region}&profile_ids={id}&season_id={season}'
 GAME_PLAYERD_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&statistics=generalpvp_matchplayed'
 OPERATOR_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&statistics=operatorpvp_timeplayed,operatorpvp_roundwon,operatorpvp_roundlost,operatorpvp_kills,operatorpvp_death'
+GUN_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&' +\
+          'statistics='+','.join(set(s[3] for s in GUN_COLUMN_LIST))
+PROFILE_URL = 'https://public-ubiservices.ubi.com/v2/users/{}/profiles'
 
 RANKS = [
     'Unranked',
@@ -144,6 +150,27 @@ SEASONS = [
     'PARA BELLUM'
     ]
 
+MAP_LIST = [
+    'Bank',
+    'Bartlett',
+    'Border',
+    'Chalet',
+    'Clubhouse',
+    'Coastline',
+    'Consulate',
+    'Favela',
+    'Hereford',
+    'House',
+    'Kafe Dostoyevsky',
+    'Kanal',
+    'Oregon',
+    'Plane',
+    'Skyscraper',
+    'Theme Park',
+    'Tower',
+    'Villa',
+    'Yacht'
+    ]
 # REFERENCES
 # Operator info json object: https://ubistatic-a.akamaihd.net/0058/prod/assets/data/operators.79229c6d.json
 
