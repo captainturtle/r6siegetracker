@@ -1,5 +1,5 @@
 # App constants
-DB_VERSION = 6
+DB_VERSION = 7
 
 
 # Constant fields
@@ -27,6 +27,7 @@ OPERATOR_LIST = [
     ('2:7', 'Blackbeard', 'bb', 'atk'),
     ('2:8', 'Capitao', 'capiato', 'atk'),
     ('2:9', 'Hibana', 'hibana', 'atk'),
+    ('2:10','Maverick', 'maverick', 'atk'),
     ('2:A', 'Jackal', 'jackal', 'atk'),
     ('2:B', 'Ying', 'ying', 'atk'),
     ('2:C', 'Ela', 'ela', 'def'),
@@ -41,6 +42,7 @@ OPERATOR_LIST = [
     ('3:7', 'Valkyrie', 'valkyrie', 'def'),
     ('3:8', 'Caveira', 'cav', 'def'),
     ('3:9', 'Echo', 'echo', 'def'),
+    ('3:10', 'Clash', 'clash', 'def'),
     ('3:A', 'Mira', 'mira', 'def'),
     ('3:B', 'Lesion', 'lesion', 'def'),
     ('3:C', 'Zofia', 'zofia', 'atk'),
@@ -147,7 +149,8 @@ SEASONS = [
     'BLOOD ORCHID',
     'WHITE NOISE',
     'CHIMERA',
-    'PARA BELLUM'
+    'PARA BELLUM',
+    'GRIM SKY'
     ]
 
 MAP_LIST = [

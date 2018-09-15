@@ -166,6 +166,20 @@ class R6Tracker():
             self.db.commit()
             print('Updated DB to version 6')
             version += 1
+        if version == 6: # 6 to 7 update
+            # New operators clash and maverick
+            self.cursor.execute('ALTER TABLE op_stats RENAME TO _old_op_stats')
+            self.install(False)
+            self.cursor.execute('PRAGMA TABLE_INFO(_old_op_stats);')
+            self.cursor.execute('INSERT INTO op_stats ({cols}) SELECT {cols} FROM _old_op_stats;'.format(cols=', '.join([i[1] for i in self.cursor.fetchall()])))
+            self.cursor.execute('DROP TABLE _old_op_stats;')
+            self.db.commit()
+            # dbinfo
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(7))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("update_date", "{}");'.format(datetime.datetime.now()))
+            self.db.commit()
+            print('Updated DB to version 7')
+            version += 1
 
     '''
     Adds a new player to the database
@@ -176,16 +190,22 @@ class R6Tracker():
         if id is None:
             print('ERROR: Failed to add {}, ID is not found'.format(name))
             return None
-        if region is None:
-            # Try all regions, choose the one with highest games
-            max_games = 0
-            region = 'ncsa'
-            for r in REGIONS:
-                r_dict = u.get_rank(id, r[1])
-                region_games = r_dict['wins'] + r_dict['losses']
-                if region_games > max_games:
-                    region = r[1]
-                    max_games = region_games
+        print('INFO: Found user {} ({})'.format(name, id))
+        try:
+            self.u.get_stats(ids=[id])
+            if region is None:
+                # Try all regions, choose the one with highest games
+                max_games = 0
+                region = 'ncsa'
+                for r in REGIONS:
+                    r_dict = u.get_rank(id, r[1])
+                    region_games = r_dict['wins'] + r_dict['losses']
+                    if region_games > max_games:
+                        region = r[1]
+                        max_games = region_games
+        except:
+            print('ERROR: An error occured while obtaining initial stats.')
+            return
         self.cursor.execute('INSERT OR IGNORE INTO players (name, uplay_id, region) VALUES (?,?,?);',(name,id, region))
         self.db.commit()
         if self.cursor.rowcount == 1:
@@ -362,11 +382,13 @@ class R6Tracker():
     operator: boolean, optional
         Option for requesting operator stats
     '''
-    def get_player_progress(self, name, start_dt=None, end_dt=None, summary_type='Increment', increment=0, stype='Ranked', printStats=True):
+    def get_player_progress(self, name, start_dt=None, end_dt=None, summary_type='Increment', increment=0, stype='Ranked', printStats=True, cutoff='00:00'):
         if start_dt is None:
             start_dt = self.custom_query('SELECT dt FROM records ORDER BY dt ASC LIMIT 1;')[0]['dt']
         if end_dt is None:
             end_dt = str(datetime.datetime.now())
+        if increment > 0:
+            start_dt = start_dt.split()[0] + ' ' + cutoff + ':00.000000'
         
         if stype == 'Ranked':
             ranked_stats = [2,3,4,5,10,11]
@@ -1223,6 +1245,7 @@ class R6Tracker():
             print('')
 
     def update_names(self):
+        change = False
         players = self.get_all_players()
         for player in players:
             info = self.u.get_player_by_id(player['uplay_id'])
@@ -1233,12 +1256,14 @@ class R6Tracker():
             oldname = player['name']
             try:
                 if newname != oldname:
+                    change = True
                     sqcmd = '''UPDATE players SET name = '{}' WHERE uplay_id = '{}';'''.format(newname, player['uplay_id'])
                     print('Changing names: {} -> {}'.format(oldname, newname))
                     self.cursor.execute(sqcmd)
                     self.db.commit()
             except Exception as e:
                 print('An error occured: {}'.format(e))
+        return change
 
     def get_db_version(self):
         self.cursor.execute('SELECT * FROM dbinfo WHERE tag="version"')
@@ -1251,7 +1276,9 @@ class R6Tracker():
         # Get current season stats to find out max number of seasons to be pulled
         res = self.u.get_rank(id=players[0]['uplay_id'], region=players[0]['region'])
         current_season = res['season']
-        for player in players:
+        np = len(players)
+        for pno, player in enumerate(players):
+            print('Getting season stats of {} ({}/{})'.format(player['name'], pno+1, np))
             for season in range(1,current_season+1):
                 ps = self.u.get_rank(id=player['uplay_id'], region=player['region'], season=season)
                 cols = ', '.join(p[1] for p in PROGRESS_LIST)
@@ -1373,6 +1400,88 @@ class R6Tracker():
             if verbose:
                 print(r)
         csvfile.close()
+
+    '''
+    Imports other records from an existing db file
+    '''
+    def import_from_db(self, fileaddress):
+        print('NOT IMPLEMENTED')
+        return None
+        # Step 1 - Check version, if version mismatch, update it
+        newdb = sqlite3.connect(fileaddress, check_same_thread=False)
+        newdb.row_factory = sqlite3.Row
+        newcursor = newdb.cursor()
+        
+        # Step 1b - Create a copy of db file named (rainbow_backup.db)
+        self.export_to_db('rainbow_backup.db')
+        
+        if True:
+            # Attach DB
+            self.cursor.execute('ATTACH DATABASE "{}" as imported'.format(fileaddress))
+            self.db.commit()
+            
+            # Step 1c - Clean empty ids from stats, op_stats, gun_stats for BOTH tables
+            print('''
+                DELETE FROM imported.stats i
+                WHERE NOT EXISTS (SELECT i.player_id FROM imported.players p WHERE p.id=i.player_id);
+            ''')
+            
+            self.cursor.execute('''
+                DELETE FROM imported.stats i
+                WHERE NOT EXISTS (SELECT i.player_id FROM imported.players p WHERE p.id=i.player_id);
+            ''')
+            
+            
+            # Step 2 - Add players to players table one by one, keep both old and new ID numbers
+            
+            self.cursor.execute('''INSERT INTO players
+                SELECT NULL, np.name, np.uplay_id, np.region
+                FROM imported.players np
+                WHERE NOT EXISTS(SELECT * FROM players op WHERE op.uplay_id=np.uplay_id);
+                ''')
+            self.cursor.execute('''
+                CREATE TABLE _playerfix AS
+                SELECT i.id as imported_id, c.id as current_id
+                FROM imported.players i, players c
+                WHERE i.uplay_id = c.uplay_id;
+                ''')
+            self.db.commit()
+            
+            # Step 3 - Replace player_id numbers in gun_stats, op_stats, stats
+            self.cursor.execute('''
+                UPDATE imported.stats
+                SET player_id=c.current_id
+                FROM _playerfix as c
+                WHERE player_id=c.imported_id
+                ''')
+            self.db.execute()
+            
+            # Step 4 - Find where each record would fit after merge, find ID numbers
+            
+            # Step 4a - Replace all existing record_ids with new ones starting with largest entries
+            
+            # Step 4b - Replace all new record_ids with new ones starting with largest entries in gun_stats, op_stats, new_stats
+            
+            # Step 4c - Add all records to records table one by one, keep both old and new ID numbers
+            
+            # Step 5 - Replace record_id in gun_stats, op_stats, stats
+            
+            # Step 6 - Add all entries in stats file to stats
+            
+            # Step 7 - Add all entries in gun_stats to gun_stats
+            
+            # Step 8 - Add all entries in op_stats to op_stats
+            
+            # Step 9 - Sort stats, gun_stats, op_stats by record_id ASC and player_id ASC
+            
+            # Completed!
+        
+        #except Exception as e:
+        #    # If something goes wrong, replace current file with rainbow_backup
+        #    print('An error has occured, reinstating using backup file.', e)
+        
+        return True
+        
 
     '''
     Copies the db into another db file
