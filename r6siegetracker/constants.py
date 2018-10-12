@@ -1,5 +1,5 @@
 # App constants
-DB_VERSION = 7
+DB_VERSION = 8
 
 
 # Constant fields
@@ -25,7 +25,7 @@ OPERATOR_LIST = [
     ('2:5', 'Blitz', 'blitz', 'atk'),
     ('2:6', 'Buck', 'buck', 'atk'),
     ('2:7', 'Blackbeard', 'bb', 'atk'),
-    ('2:8', 'Capitao', 'capiato', 'atk'),
+    ('2:8', 'Capitao', 'capitao', 'atk'),
     ('2:9', 'Hibana', 'hibana', 'atk'),
     ('2:10','Maverick', 'maverick', 'atk'),
     ('2:A', 'Jackal', 'jackal', 'atk'),

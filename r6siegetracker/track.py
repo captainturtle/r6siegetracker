@@ -180,6 +180,20 @@ class R6Tracker():
             self.db.commit()
             print('Updated DB to version 7')
             version += 1
+        if version == 7: # 7 to 8 update
+            # Fix for Capitao typo
+            self.cursor.execute('ALTER TABLE op_stats RENAME TO _op_stats;')
+            self.install(False)
+            self.cursor.execute('INSERT INTO op_stats SELECT * FROM _op_stats;')
+            self.cursor.execute('DROP TABLE _op_stats;')
+            self.db.commit()
+            # dbinfo
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(8))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("update_date", "{}");'.format(
+                datetime.datetime.now()))
+            self.db.commit()
+            print('Updated DB to version 8')
+            version += 1
 
     '''
     Adds a new player to the database
