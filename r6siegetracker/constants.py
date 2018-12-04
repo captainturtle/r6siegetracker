@@ -1,5 +1,5 @@
 # App constants
-DB_VERSION = 8
+DB_VERSION = 9
 
 
 # Constant fields
@@ -27,7 +27,8 @@ OPERATOR_LIST = [
     ('2:7', 'Blackbeard', 'bb', 'atk'),
     ('2:8', 'Capitao', 'capitao', 'atk'),
     ('2:9', 'Hibana', 'hibana', 'atk'),
-    ('2:10','Maverick', 'maverick', 'atk'),
+    ('2:10', 'Maverick', 'maverick', 'atk'),
+    ('2:11', 'Nomad', 'nomad', 'atk'),
     ('2:A', 'Jackal', 'jackal', 'atk'),
     ('2:B', 'Ying', 'ying', 'atk'),
     ('2:C', 'Ela', 'ela', 'def'),
@@ -43,6 +44,7 @@ OPERATOR_LIST = [
     ('3:8', 'Caveira', 'cav', 'def'),
     ('3:9', 'Echo', 'echo', 'def'),
     ('3:10', 'Clash', 'clash', 'def'),
+    ('3:11', 'Kaid', 'kaid', 'def'),
     ('3:A', 'Mira', 'mira', 'def'),
     ('3:B', 'Lesion', 'lesion', 'def'),
     ('3:C', 'Zofia', 'zofia', 'atk'),
@@ -150,7 +152,8 @@ SEASONS = [
     'WHITE NOISE',
     'CHIMERA',
     'PARA BELLUM',
-    'GRIM SKY'
+    'GRIM SKY',
+    'WIND BASTION'
     ]
 
 MAP_LIST = [
@@ -172,9 +175,10 @@ MAP_LIST = [
     'Theme Park',
     'Tower',
     'Villa',
-    'Yacht'
+    'Yacht',
+    'Fortress'
     ]
 # REFERENCES
-# Operator info json object: https://ubistatic-a.akamaihd.net/0058/prod/assets/data/operators.79229c6d.json
+# Operator info json object: https://game-rainbow6.ubi.com/assets/data/operators.bbbf29a090.json
 
 

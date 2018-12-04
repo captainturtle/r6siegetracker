@@ -194,7 +194,22 @@ class R6Tracker():
             self.db.commit()
             print('Updated DB to version 8')
             version += 1
+        if version == 8: # 8 to 9 update
+            # New season operators, Nomad and Kaid
+            self.cursor.execute('ALTER TABLE op_stats RENAME TO _old_op_stats')
+            self.install(False)
+            self.cursor.execute('PRAGMA TABLE_INFO(_old_op_stats);')
+            self.cursor.execute('INSERT INTO op_stats ({cols}) SELECT {cols} FROM _old_op_stats;'.format(cols=', '.join([i[1] for i in self.cursor.fetchall()])))
+            self.cursor.execute('DROP TABLE _old_op_stats;')
+            self.db.commit()
+            # dbinfo
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(7))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("update_date", "{}");'.format(datetime.datetime.now()))
+            self.db.commit()
+            print('Updated DB to version 9')
+            version += 1
 
+            
     '''
     Adds a new player to the database
     '''
