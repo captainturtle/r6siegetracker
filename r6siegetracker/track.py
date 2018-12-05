@@ -203,7 +203,7 @@ class R6Tracker():
             self.cursor.execute('DROP TABLE _old_op_stats;')
             self.db.commit()
             # dbinfo
-            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(7))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(9))
             self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("update_date", "{}");'.format(datetime.datetime.now()))
             self.db.commit()
             print('Updated DB to version 9')
