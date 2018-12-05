@@ -182,10 +182,21 @@ class R6Tracker():
             version += 1
         if version == 7: # 7 to 8 update
             # Fix for Capitao typo
-            self.cursor.execute('ALTER TABLE op_stats RENAME TO _op_stats;')
+            self.cursor.execute('ALTER TABLE op_stats RENAME TO _old_op_stats')
             self.install(False)
-            self.cursor.execute('INSERT INTO op_stats SELECT * FROM _op_stats;')
-            self.cursor.execute('DROP TABLE _op_stats;')
+            self.cursor.execute('PRAGMA TABLE_INFO(_old_op_stats);')
+            old_cols = []
+            new_cols = []
+            for i in self.cursor.fetchall():
+                if 'capiato' not in i[1]:
+                    old_cols.append(i[1])
+                    new_cols.append(i[1])
+                else:
+                    old_cols.append(i[1])
+                    new_cols.append(i[1].replace('capiato', 'capitao'))
+            self.cursor.execute('INSERT INTO op_stats ({new_cols}) SELECT {old_cols} FROM _old_op_stats;'.format(
+                old_cols=', '.join(old_cols), new_cols=', '.join(new_cols)))
+            self.cursor.execute('DROP TABLE _old_op_stats;')
             self.db.commit()
             # dbinfo
             self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(8))
@@ -196,6 +207,8 @@ class R6Tracker():
             version += 1
         if version == 8: # 8 to 9 update
             # New season operators, Nomad and Kaid
+            self.cursor.execute('DROP TABLE IF EXISTS _op_stats;')
+            self.db.commit()
             self.cursor.execute('ALTER TABLE op_stats RENAME TO _old_op_stats')
             self.install(False)
             self.cursor.execute('PRAGMA TABLE_INFO(_old_op_stats);')
