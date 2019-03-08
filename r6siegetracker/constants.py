@@ -1,5 +1,5 @@
 # App constants
-DB_VERSION = 9
+DB_VERSION = 10
 
 
 # Constant fields
@@ -29,6 +29,7 @@ OPERATOR_LIST = [
     ('2:9', 'Hibana', 'hibana', 'atk'),
     ('2:10', 'Maverick', 'maverick', 'atk'),
     ('2:11', 'Nomad', 'nomad', 'atk'),
+    ('2:12', 'Mozzie', 'mozzie', 'def'),
     ('2:A', 'Jackal', 'jackal', 'atk'),
     ('2:B', 'Ying', 'ying', 'atk'),
     ('2:C', 'Ela', 'ela', 'def'),
@@ -45,6 +46,7 @@ OPERATOR_LIST = [
     ('3:9', 'Echo', 'echo', 'def'),
     ('3:10', 'Clash', 'clash', 'def'),
     ('3:11', 'Kaid', 'kaid', 'def'),
+    ('3:12', 'Gridlock', 'gridlock', 'atk'),
     ('3:A', 'Mira', 'mira', 'def'),
     ('3:B', 'Lesion', 'lesion', 'def'),
     ('3:C', 'Zofia', 'zofia', 'atk'),
@@ -153,7 +155,8 @@ SEASONS = [
     'CHIMERA',
     'PARA BELLUM',
     'GRIM SKY',
-    'WIND BASTION'
+    'WIND BASTION',
+    'BURNT HORIZON'
     ]
 
 MAP_LIST = [
@@ -176,7 +179,8 @@ MAP_LIST = [
     'Tower',
     'Villa',
     'Yacht',
-    'Fortress'
+    'Fortress',
+    'Outback'
     ]
 # REFERENCES
 # Operator info json object: https://game-rainbow6.ubi.com/assets/data/operators.bbbf29a090.json
