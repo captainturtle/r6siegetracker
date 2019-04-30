@@ -197,8 +197,10 @@ class UbiConnection:
                 print('ERROR: Player could not found with ID {}'.format(id))
                 return None
             else:
-                userinfo = r_dict['profiles'][0]
-                return userinfo
+                for p in r_dict['profiles']:
+                    if p['platformType'] == 'uplay':
+                        userinfo = p
+                        return userinfo
         else:
             raise Exception('ERROR: Cannot find ID')
 
