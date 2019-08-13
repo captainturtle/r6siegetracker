@@ -1,5 +1,5 @@
 # App constants
-DB_VERSION = 10
+DB_VERSION = 11
 
 
 # Constant fields
@@ -34,6 +34,8 @@ OPERATOR_LIST = [
     ('2:B', 'Ying', 'ying', 'atk'),
     ('2:C', 'Ela', 'ela', 'def'),
     ('2:D', 'Dokkaebi', 'dokkaebi', 'atk'),
+    ('2:13', 'Nokk', 'nokk', 'atk'),
+    ('2:14', 'Warden', 'warden', 'def'),
     ('2:F', 'Maestro', 'maestro', 'def'),
     ('3:1', 'Mute', 'mute', 'def'),
     ('3:2', 'Ash', 'ash', 'atk'),
@@ -156,7 +158,8 @@ SEASONS = [
     'PARA BELLUM',
     'GRIM SKY',
     'WIND BASTION',
-    'BURNT HORIZON'
+    'BURNT HORIZON',
+    'PHANTOM SIGHT'
     ]
 
 MAP_LIST = [
