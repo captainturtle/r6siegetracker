@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name = 'r6siegetracker',
-    version = '0.0.1',
+    version = '1.0.0',
     url = 'https://github.com/captainturtle/r6siegetracker',
     author = 'Captain Turtle (TurtleBud)',
     author_email = 'martinknight@yandex.com',
