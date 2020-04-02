@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from r6siegetracker.connect import UbiConnection
-from r6siegetracker.constants import STAT_LIST, PROGRESS_LIST, RANKS, REGIONS, SEASONS, DB_VERSION
+from r6siegetracker.constants import STAT_LIST, PROGRESS_LIST, RANKS, REGIONS, SEASONS, DB_VERSION, EMBER_RISE_NEW_RANKS
 from r6siegetracker.constants import SORTED_OPERATOR_LIST, OPERATOR_COLUMN_LIST,  GUN_LIST, GUN_COLUMN_LIST
 import datetime
 from shutil import copyfile
@@ -524,9 +524,14 @@ class R6Tracker():
                 WHERE players.name="{name}" AND players.id=stats.player_id AND records.id=stats.record_id AND records.dt <= "{st}" ORDER BY stats.record_id DESC LIMIT 1
                 )
                 '''
-                
+
+                start = 0
                 daydiff = self.time_diff(start_dt, end_dt) #datetime.datetime.strptime(start_dt, '%Y-%m-%d %H:%M:%S') - datetime.datetime.strptime(end_dt, '%Y-%m-%d %H:%M:%S')
-                for inc in range(0, daydiff.days+1, increment):
+                if (daydiff.days / increment) >= 450:
+                    print('INFO: Too many days are in DB, displaying last 500 days...')
+                    start = max(0, int(daydiff.days/increment)+1-450)
+
+                for inc in range(start, daydiff.days+1, increment):
                     dailyunion = '''
                     UNION
                     SELECT date("{{st}}", '+{inc} days') as d_from, date("{{st}}", '+{inc1} days') as d_to, *  FROM(
@@ -663,7 +668,7 @@ class R6Tracker():
                             '{:.0f}'.format(r1['season_losses']),
                             '{:.4f}'.format((r1['season_wins'])/max(1,r1['season_losses'])),
                             '{:.2f}'.format(r1['mmr']),
-                            RANKS[int(r1['rank'])],
+                            EMBER_RISE_NEW_RANKS[int(r1['rank'])][0],
                             '{:.2f}'.format(r1['skill_mean']),
                             '{:.2f}'.format(r1['skill_std'])
                             ])
@@ -1285,8 +1290,8 @@ class R6Tracker():
                 p['ranked_won'],
                 p['ranked_lost'],
                 '{:.4f}'.format(p['ranked_won']/max(1,p['ranked_lost'])),
-                RANKS[round(p['rank'])],
-                RANKS[round(p['max_rank'])],
+                EMBER_RISE_NEW_RANKS[round(p['rank'])][0],
+                EMBER_RISE_NEW_RANKS[round(p['max_rank'])][0],
                 '{:.3f}'.format(p['mmr']),
                 '{:.3f}'.format(p['max_mmr']),
                 '{:.3f}'.format(p['skill_mean']),
@@ -1337,9 +1342,9 @@ class R6Tracker():
                     int(s['season_wins']),
                     int(s['season_losses']),
                     '{:.4f}'.format(s['season_wins']/max(1,s['season_losses'])),
-                    RANKS[int(s['rank'])],
+                    EMBER_RISE_NEW_RANKS[int(s['rank'])][0],
                     '{:.3f}'.format(s['mmr']),
-                    RANKS[int(s['max_rank'])],
+                    EMBER_RISE_NEW_RANKS[int(s['max_rank'])][0],
                     '{:.3f}'.format(s['max_mmr']),
                     '{:.3f}'.format(s['skill_mean']),
                     '{:.3f}'.format(s['skill_mean'] - 1.96*s['skill_std']),
@@ -1425,7 +1430,7 @@ class R6Tracker():
                     res = self.u.get_rank(id=uid)
                     mmr = res['mmr']
                     std = res['skill_stdev']
-                    rank = RANKS[int(res['rank'])]
+                    rank = EMBER_RISE_NEW_RANKS[int(res['rank'])][0]
                     wins = res['wins']
                     losses = res['losses']
                     if op_stats:
