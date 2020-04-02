@@ -237,7 +237,7 @@ class R6Tracker():
             self.db.commit()
             print('Updated DB to version 10')
             version += 1
-        if version == 10: # 9 to 10 update
+        if version == 10:
             # New season, new operators
             self.cursor.execute('DROP TABLE IF EXISTS _op_stats;')
             self.db.commit()
@@ -253,7 +253,38 @@ class R6Tracker():
             self.db.commit()
             print('Updated DB to version {}'.format(version+1))
             version += 1
-
+        if version == 11:
+            # New season, new operators
+            self.cursor.execute('DROP TABLE IF EXISTS _op_stats;')
+            self.db.commit()
+            self.cursor.execute('ALTER TABLE op_stats RENAME TO _old_op_stats')
+            self.install(False)
+            self.cursor.execute('PRAGMA TABLE_INFO(_old_op_stats);')
+            self.cursor.execute('INSERT INTO op_stats ({cols}) SELECT {cols} FROM _old_op_stats;'.format(cols=', '.join([i[1] for i in self.cursor.fetchall()])))
+            self.cursor.execute('DROP TABLE _old_op_stats;')
+            self.db.commit()
+            # dbinfo
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(version+1))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("update_date", "{}");'.format(datetime.datetime.now()))
+            self.db.commit()
+            print('Updated DB to version {}'.format(version+1))
+            version += 1
+        if version == 12:
+            # New season, new operators
+            self.cursor.execute('DROP TABLE IF EXISTS _op_stats;')
+            self.db.commit()
+            self.cursor.execute('ALTER TABLE op_stats RENAME TO _old_op_stats')
+            self.install(False)
+            self.cursor.execute('PRAGMA TABLE_INFO(_old_op_stats);')
+            self.cursor.execute('INSERT INTO op_stats ({cols}) SELECT {cols} FROM _old_op_stats;'.format(cols=', '.join([i[1] for i in self.cursor.fetchall()])))
+            self.cursor.execute('DROP TABLE _old_op_stats;')
+            self.db.commit()
+            # dbinfo
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("version", {});'.format(version+1))
+            self.cursor.execute('INSERT OR REPLACE INTO dbinfo (tag, value) VALUES ("update_date", "{}");'.format(datetime.datetime.now()))
+            self.db.commit()
+            print('Updated DB to version {}'.format(version+1))
+            version += 1
             
     '''
     Adds a new player to the database

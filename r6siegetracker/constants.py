@@ -1,5 +1,5 @@
 # App constants
-DB_VERSION = 11
+DB_VERSION = 13
 
 
 # Constant fields
@@ -36,6 +36,11 @@ OPERATOR_LIST = [
     ('2:D', 'Dokkaebi', 'dokkaebi', 'atk'),
     ('2:13', 'Nokk', 'nokk', 'atk'),
     ('2:14', 'Warden', 'warden', 'def'),
+    ('2:15', 'Goyo', 'goyo', 'def'),
+    ('2:16', 'Amaru', 'amaru', 'atk'),
+    ('2:17', 'Kali', 'kali', 'atk'),
+    ('2:18', 'Oryx', 'oryx', 'def'),
+    ('2:19', 'Iana', 'iana', 'atk'),
     ('2:F', 'Maestro', 'maestro', 'def'),
     ('3:1', 'Mute', 'mute', 'def'),
     ('3:2', 'Ash', 'ash', 'atk'),
@@ -49,6 +54,7 @@ OPERATOR_LIST = [
     ('3:10', 'Clash', 'clash', 'def'),
     ('3:11', 'Kaid', 'kaid', 'def'),
     ('3:12', 'Gridlock', 'gridlock', 'atk'),
+    ('3:17', 'Wamai', 'wamai', 'def'),
     ('3:A', 'Mira', 'mira', 'def'),
     ('3:B', 'Lesion', 'lesion', 'def'),
     ('3:C', 'Zofia', 'zofia', 'atk'),
@@ -108,7 +114,7 @@ PROGRESS_LIST = [
 OPERATOR_COLUMN_LIST = [('operatorpvp_{}:{}:infinite'.format(s[0], o[0]), '{} {}'.format(o[1], s[1])  , o[2] + '_' + s[2]) for o in OPERATOR_LIST for s in OPERATOR_STAT_LIST]
 
 # Entry points
-LOGIN_URL = 'https://uplayconnect.ubi.com/ubiservices/v2/profiles/sessions'
+LOGIN_URL = 'https://public-ubiservices.ubi.com/v3/profiles/sessions'
 PLAYER_URL = 'https://public-ubiservices.ubi.com/v2/profiles?platformType=uplay&{key}={val}'
 STATS_URL = 'https://public-ubiservices.ubi.com/v1/spaces/5172a557-50b5-4665-b7db-e3f2e8c5041d/sandboxes/OSBOR_PC_LNCH_A/playerstats2/statistics?populations={ids}&' +\
             'statistics='+','.join(set(s[3] for s in STAT_LIST))
@@ -144,6 +150,34 @@ RANKS = [
     'Diamond'
     ]
 
+import numpy as np
+EMBER_RISE_NEW_RANKS = [
+    ['Unranked', 0, 1059],
+    ['Copper V', 1100, 1199],
+    ['Copper IV', 1200, 1299],
+    ['Copper III', 1300, 1399],
+    ['Copper II', 1400, 1499],
+    ['Copper I', 1500, 1599],
+    ['Bronze V', 1600, 1699],
+    ['Bronze IV', 1700, 1799],
+    ['Bronze III', 1800, 1899],
+    ['Bronze II', 1900, 1999],
+    ['Bronze I', 2000, 2099],
+    ['Silver V', 2100, 2199],
+    ['Silver IV', 2200, 2299],
+    ['Silver III', 2300, 2399],
+    ['Silver II', 2400, 2499],
+    ['Silver I', 2500, 2599],
+    ['Gold III', 2600, 2799],
+    ['Gold II', 2800, 2999],
+    ['Gold I', 3000, 3199],
+    ['Platinum III', 3200, 3599],
+    ['Platinum II', 3600, 3999],
+    ['Platinum I', 4000, 4399],
+    ['Diamond', 4400, 4999],
+    ['Champion', 5000, np.inf],
+]
+
 SEASONS = [
     '',
     'BLACK ICE',
@@ -159,7 +193,8 @@ SEASONS = [
     'GRIM SKY',
     'WIND BASTION',
     'BURNT HORIZON',
-    'PHANTOM SIGHT'
+    'PHANTOM SIGHT',
+    'EMBER RISE'
     ]
 
 MAP_LIST = [
